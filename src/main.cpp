@@ -37,7 +37,11 @@ string hasData(string s) {
 
 double distance(double x1, double y1, double x2, double y2)
 {
-	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
+	return sqrt((x2 - x1)*(x2 - x1) + (y2 - y1)*(y2 - y1));
+}
+double mag(double X, double Y)
+{
+	return sqrt(pow(X,2) + pow(Y,2));
 }
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y)
 {
@@ -208,12 +212,15 @@ int main() {
   // Reference Velocity
   double ref_vel = 49.5; // mph
 
+  // Update Rate
+  double update_rate = 0.02; // seconds
+
 // Needed for backwards compatibility with older uWebSockets version
 #ifdef UWS_VCPKG
-  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
+  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 #else
-  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 #endif
     // "42" at the start of the message means there's a websocket message event.
@@ -253,6 +260,40 @@ int main() {
 
 			// Size of the previous path
 			int prev_size = previous_path_x.size();
+
+			if (prev_size > 0) {
+				car_s = end_path_s;
+			}
+
+			bool too_close = false;
+
+			// Find ref_v to use
+			for (int i = 0; i < sensor_fusion.size(); i++) {
+				// Car is in my lane
+				float d = sensor_fusion[i][6];
+				if (d < (2 + 4 * lane + 2) && d >(2 + 4 * lane - 2)) {
+					double vx = sensor_fusion[i][3];
+					double vy = sensor_fusion[i][4];
+					double check_speed = mag(vx, vy);
+					double check_car_s = sensor_fusion[i][5];
+
+					// Look ahead one step
+					check_car_s += ((double)prev_size*update_rate*check_speed);
+
+					if ((check_car_s > car_s) && ((check_car_s - car_s) < 30)) {
+						if (lane == 0) {
+							lane = 1;
+						}
+						else if (lane == 1) {
+							lane = 0;
+						}
+
+//						ref_vel = 29.5;	// mph
+					}
+				}
+			}
+
+
 
 			// Create a list of widely spaced (x,y) waypoints
 			vector<double> ptsx, ptsy;
@@ -336,11 +377,9 @@ int main() {
 			// Fill up the rest of our path planner after filling it with previous points
 			for (int i = 1; i <= 50 - previous_path_x.size(); ++i) {
 				double ref_vel_mps = ref_vel / 2.24;
-				double N = target_dist / (0.2*ref_vel_mps);
+				double N = target_dist / (update_rate*ref_vel_mps);
 				double x_point = x_add_on + target_x / N;
 				double y_point = s(x_point);
-
-				cout << "got here: " << i << endl;
 
 				x_add_on = x_point;
 
