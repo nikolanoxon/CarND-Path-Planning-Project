@@ -9,6 +9,8 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
 #include "spline.h"
+#include "Cost.h"
+#include "Vehicle.h"
 
 using namespace std;
 
@@ -397,6 +399,8 @@ int main() {
 				next_x_vals.push_back(x_point);
 				next_y_vals.push_back(y_point);
 			}
+
+			choose_next`
 
           	json msgJson;
 

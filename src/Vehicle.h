@@ -12,7 +12,7 @@ class Vehicle {
 public:
 
 	map<string, int> lane_direction = { {"PLCL", 1}, {"LCL", 1}, {"LCR", -1}, {"PLCR", -1} };
-
+/**/
 	struct collider {
 
 		bool collision; // is there a collision?
@@ -26,7 +26,11 @@ public:
 
 	int lane;
 
-	int s;
+	float s;
+
+	float d;
+
+	float theta;
 
 	float v;
 
@@ -48,7 +52,7 @@ public:
 	* Constructor
 	*/
 	Vehicle();
-	Vehicle(int lane, float s, float v, float a, string state = "CS");
+	Vehicle(int lane, float s, float d, float theta, float v, float a, string state = "KL");
 
 	/**
 	* Destructor
