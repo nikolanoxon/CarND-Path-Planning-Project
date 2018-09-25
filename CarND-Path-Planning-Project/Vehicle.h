@@ -63,8 +63,6 @@ public:
 
 	vector<float> get_kinematics(map<int, vector<Vehicle>> predictions, int lane);
 
-	vector<Vehicle> constant_speed_trajectory();
-
 	vector<Vehicle> keep_lane_trajectory(map<int, vector<Vehicle>> predictions);
 
 	vector<Vehicle> lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions);

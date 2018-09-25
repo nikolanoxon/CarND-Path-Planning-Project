@@ -21,6 +21,7 @@ minimize lane changes? (not sure if needed)
 
 
 
+// TODO: change this to penalize any lane change
 float goal_distance_cost(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions, map<string, float> & data) {
 	/*
 	Cost increases based on distance of intended lane (for planning a lane change) and final lane of trajectory.
@@ -36,7 +37,7 @@ float goal_distance_cost(const Vehicle & vehicle, const vector<Vehicle> & trajec
 	}
 	return cost;
 }
-
+// TODO: change this to penalize driving slow
 float inefficiency_cost(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions, map<string, float> & data) {
 	/*
 	Cost becomes higher for trajectories with intended lane and final lane that have traffic slower than vehicle's target speed.
@@ -56,7 +57,7 @@ float inefficiency_cost(const Vehicle & vehicle, const vector<Vehicle> & traject
 
 	return cost;
 }
-
+// TODO: evaluate if this function makes sense
 float lane_speed(const map<int, vector<Vehicle>> & predictions, int lane) {
 	/*
 	All non ego vehicles in a lane have the same speed, so to get the speed limit for a lane,
@@ -72,7 +73,7 @@ float lane_speed(const map<int, vector<Vehicle>> & predictions, int lane) {
 	//Found no vehicle in the lane
 	return -1.0;
 }
-
+// TODO: change this function to receive data from the simulator
 float calculate_cost(const Vehicle & vehicle, const map<int, vector<Vehicle>> & predictions, const vector<Vehicle> & trajectory) {
 	/*
 	Sum weighted cost functions to get total cost for trajectory.
@@ -92,7 +93,7 @@ float calculate_cost(const Vehicle & vehicle, const map<int, vector<Vehicle>> & 
 	return cost;
 
 }
-
+// TODO: evaluate if this function makes sense
 map<string, float> get_helper_data(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions) {
 	/*
 	Generate helper data to use in cost functions:

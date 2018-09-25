@@ -29,10 +29,6 @@ Vehicle::~Vehicle() {}
 
 vector<Vehicle> Vehicle::choose_next_state(map<int, vector<Vehicle>> predictions) {
 	/*
-	Here you can implement the transition_function code from the Behavior Planning Pseudocode
-	classroom concept. Your goal will be to return the best (lowest cost) trajectory corresponding
-	to the next state.
-
 	INPUT: A predictions map. This is a map of vehicle id keys with predicted
 		vehicle trajectories as values. Trajectories are a vector of Vehicle objects representing
 		the vehicle at the current timestep and one timestep in the future.
@@ -105,10 +101,7 @@ vector<Vehicle> Vehicle::generate_trajectory(string state, map<int, vector<Vehic
 	Given a possible next state, generate the appropriate trajectory to realize the next state.
 	*/
 	vector<Vehicle> trajectory;
-	if (state.compare("CS") == 0) {
-		trajectory = constant_speed_trajectory();
-	}
-	else if (state.compare("KL") == 0) {
+	if (state.compare("KL") == 0) {
 		trajectory = keep_lane_trajectory(predictions);
 	}
 	else if (state.compare("LCL") == 0 || state.compare("LCR") == 0) {
@@ -152,17 +145,7 @@ vector<float> Vehicle::get_kinematics(map<int, vector<Vehicle>> predictions, int
 	return{ new_position, new_velocity, new_accel };
 
 }
-
-vector<Vehicle> Vehicle::constant_speed_trajectory() {
-	/*
-	Generate a constant speed trajectory.
-	*/
-	float next_pos = position_at(1);
-	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->v, this->a, this->state),
-								  Vehicle(this->lane, next_pos, this->v, 0, this->state) };
-	return trajectory;
-}
-
+// TODO: update the trajectory generators with method from main.cpp
 vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predictions) {
 	/*
 	Generate a keep lane trajectory.
@@ -175,7 +158,7 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 	trajectory.push_back(Vehicle(this->lane, new_s, new_v, new_a, "KL"));
 	return trajectory;
 }
-
+// TODO: update the trajectory generators with method from main.cpp
 vector<Vehicle> Vehicle::prep_lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions) {
 	/*
 	Generate a trajectory preparing for a lane change.
@@ -213,7 +196,7 @@ vector<Vehicle> Vehicle::prep_lane_change_trajectory(string state, map<int, vect
 	trajectory.push_back(Vehicle(this->lane, new_s, new_v, new_a, state));
 	return trajectory;
 }
-
+// TODO: update the trajectory generators with method from main.cpp
 vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions) {
 	/*
 	Generate a lane change trajectory.
@@ -242,7 +225,7 @@ void Vehicle::increment(int dt = 1) {
 float Vehicle::position_at(int t) {
 	return this->s + this->v*t + this->a*t*t / 2.0;
 }
-
+// TODO: change this function to receive data from the simulator
 bool Vehicle::get_vehicle_behind(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle) {
 	/*
 	Returns a true if a vehicle is found behind the current vehicle, false otherwise. The passed reference
@@ -262,6 +245,7 @@ bool Vehicle::get_vehicle_behind(map<int, vector<Vehicle>> predictions, int lane
 	return found_vehicle;
 }
 
+// TODO: change this function to receive data from the simulator
 bool Vehicle::get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle) {
 	/*
 	Returns a true if a vehicle is found ahead of the current vehicle, false otherwise. The passed reference
@@ -281,6 +265,7 @@ bool Vehicle::get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane,
 	return found_vehicle;
 }
 
+// TODO: change this function to receive data from the simulator
 vector<Vehicle> Vehicle::generate_predictions(int horizon) {
 	/*
 	Generates predictions for non-ego vehicles to be used
@@ -299,6 +284,7 @@ vector<Vehicle> Vehicle::generate_predictions(int horizon) {
 
 }
 
+// TODO: change this function to receive data from the simulator
 void Vehicle::realize_next_state(vector<Vehicle> trajectory) {
 	/*
 	Sets state and kinematics for ego vehicle using the last state of the trajectory.
@@ -311,6 +297,7 @@ void Vehicle::realize_next_state(vector<Vehicle> trajectory) {
 	this->a = next_state.a;
 }
 
+// TODO: change this function to receive data from the simulator
 void Vehicle::configure(vector<int> road_data) {
 	/*
 	Called by simulator before simulation begins. Sets various

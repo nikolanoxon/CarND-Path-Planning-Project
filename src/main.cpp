@@ -267,6 +267,7 @@ int main() {
 
 			bool too_close = false;
 
+			// TODO: move all this to the trajectoy generator functions
 			// Find ref_v to use
 			for (int i = 0; i < sensor_fusion.size(); i++) {
 				// Car is in my lane
