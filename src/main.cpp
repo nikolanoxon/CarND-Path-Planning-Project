@@ -212,7 +212,7 @@ int main() {
   int lane = 1;
 
   // Lane width
-  float lane_width = 4; // meters
+//  float lane_width = 4; // meters
 
   // Reference Velocity
   double ref_vel = 49.5; // mph
@@ -225,10 +225,10 @@ int main() {
 
 // Needed for backwards compatibility with older uWebSockets version
 #ifdef UWS_VCPKG
-  h.onMessage([&lane_width,&vehicle,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
+  h.onMessage([&vehicle,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 #else
-  h.onMessage([&lane_width,&vehicle,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&vehicle,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 #endif
     // "42" at the start of the message means there's a websocket message event.
@@ -263,14 +263,15 @@ int main() {
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
 
+			// Sensor Fusion Data, a list of all other cars on the same side of the road.
+			auto sensor_fusion = j[1]["sensor_fusion"];
+
 			// Vehicle data
 			vehicle.s = car_s;
 			vehicle.d = car_d;
 			vehicle.v = car_speed;
 			vehicle.yaw = deg2rad(car_yaw);
-			
-			// Sensor Fusion Data, a list of all other cars on the same side of the road.
-          	auto sensor_fusion = j[1]["sensor_fusion"];
+			vehicle.target_speed = ref_vel;
 
 
 			// A map of predictions for non-ego vehicles
@@ -286,60 +287,33 @@ int main() {
 				float s = sensor_fusion[i][5];
 				float d = sensor_fusion[i][6];
 
-				Vehicle vehicle;
-				vehicle.v = mag(vx, vy);
-				vehicle.s = s;
-				vehicle.d = d;
-				vehicle.lane = int(ceil(d)) % int(lane_width);
-				vehicle.a = 0; // Assume no acceleration
+				Vehicle road_vehicle;
+				road_vehicle.v = mag(vx, vy);
+				road_vehicle.s = s;
+				road_vehicle.d = d;
+				road_vehicle.lane = int(ceil(d)) % int(vehicle.lane_width);
+				road_vehicle.a = 0; // Assume no acceleration
 
 				//A vector of predictions for a non-ego vehicle
-				vector<Vehicle> prediction = vehicle.generate_predictions();
+				vector<Vehicle> prediction = road_vehicle.generate_predictions();
 
 				predictions.insert(pair<int, vector<Vehicle>>(id, prediction));
-			}
+			} 
 
-			vehicle.choose_next_state(predictions);
+			vector<Vehicle> best_trajectory = vehicle.choose_next_state(predictions);
 
-/////////////////////////////////////////////////////
-/////////////////////////////////////////////////////
-/////////////////////////////////////////////////////
+			float next_s = best_trajectory[1].s;
+			float next_d = best_trajectory[1].d;
+			float next_lane = best_trajectory[1].lane;
 
+			//TODO: best trajectory is always "KL"
+			cout << best_trajectory[1].state << endl;
 
 			// Size of the previous path
 			int prev_size = previous_path_x.size();
 
 			if (prev_size > 0) {
 				car_s = end_path_s;
-			}
-
-			bool too_close = false;
-
-			// TODO: move all this to the trajectoy generator functions
-			// Find ref_v to use
-			for (int i = 0; i < sensor_fusion.size(); i++) {
-				// Car is in my lane
-				float d = sensor_fusion[i][6];
-				if (d < (2 + lane_width * lane + 2) && d >(2 + lane_width * lane - 2)) {
-					double vx = sensor_fusion[i][3];
-					double vy = sensor_fusion[i][4];
-					double check_speed = mag(vx, vy);
-					double check_car_s = sensor_fusion[i][5];
-
-					// Look ahead one step
-					check_car_s += ((double)prev_size*update_rate*check_speed);
-
-					if ((check_car_s > car_s) && ((check_car_s - car_s) < 30)) {
-						if (lane == 0) {
-							lane = 1;
-						}
-						else if (lane == 1) {
-							lane = 0;
-						}
-
-//						ref_vel = 29.5;	// mph
-					}
-				}
 			}
 
 			// Create a list of widely spaced (x,y) waypoints
@@ -378,9 +352,10 @@ int main() {
 			}
 
 			// In Frenet add evenly 30m spaced points ahead of the starting reference
-			vector<double> next_wp0 = getXY(car_s + 30, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(car_s + 60, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp2 = getXY(car_s + 90, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp0 = getXY(car_s + 0.25*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(car_s + 0.5*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp2 = getXY(car_s + 0.75*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
 
 			ptsx.push_back(next_wp0[0]);
 			ptsx.push_back(next_wp1[0]);
@@ -416,7 +391,7 @@ int main() {
 			}
 
 			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = 30.0;
+			double target_x = next_s;
 			double target_y = s(target_x);
 			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
 			double x_add_on = 0;
@@ -445,14 +420,10 @@ int main() {
 			}
 
           	json msgJson;
-
-			msgJson["next_x"] = trajectory[0];
-			msgJson["next_y"] = trajectory[1];
+			// TODO: vehicle does not follow spline
+			msgJson["next_x"] = next_x_vals;
+			msgJson["next_y"] = next_y_vals;
 			
-/////////////////////////////////////////////////////
-/////////////////////////////////////////////////////
-/////////////////////////////////////////////////////
-
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
 // Needed for backwards compatibility with older uWebSockets version

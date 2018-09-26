@@ -5,7 +5,7 @@
 #include <map>
 #include <math.h>
 
-const float REACH_GOAL = pow(10, 6);
+const float REACH_GOAL = pow(10, 1);
 const float EFFICIENCY = pow(10, 5);
 
 /*
@@ -36,7 +36,7 @@ float inefficiency_cost(const Vehicle & vehicle, const vector<Vehicle> & traject
 	/*
 	Cost becomes higher for trajectories with intended lane and final lane that have traffic slower than vehicle's target speed.
 	*/
-
+	//TODO: rewrite this so that it looks for the vehicle in the intended lane with the smallest positive s value
 	float proposed_speed_intended = lane_speed(predictions, data["intended_lane"]);
 	if (proposed_speed_intended < 0) {
 		proposed_speed_intended = vehicle.target_speed;
@@ -87,13 +87,12 @@ float calculate_cost(const Vehicle & vehicle, const map<int, vector<Vehicle>> & 
 	return cost;
 
 }
-// TODO: evaluate if this function makes sense
+// TODO: evaluate if this function is still needed
 map<string, float> get_helper_data(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions) {
 	/*
 	Generate helper data to use in cost functions:
 	indended_lane: the current lane +/- 1 if vehicle is planning or executing a lane change.
 	final_lane: the lane of the vehicle at the end of the trajectory.
-	distance_to_goal: the distance of the vehicle to the goal.
 
 	Note that indended_lane and final_lane are both included to help differentiate between planning and executing
 	a lane change in the cost functions.
@@ -112,11 +111,9 @@ map<string, float> get_helper_data(const Vehicle & vehicle, const vector<Vehicle
 		intended_lane = trajectory_last.lane;
 	}
 
-	float distance_to_goal = vehicle.goal_s - trajectory_last.s;
 	float final_lane = trajectory_last.lane;
 	trajectory_data["intended_lane"] = intended_lane;
 	trajectory_data["final_lane"] = final_lane;
-	trajectory_data["distance_to_goal"] = distance_to_goal;
 	return trajectory_data;
 }
 

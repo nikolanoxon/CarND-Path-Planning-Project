@@ -12,6 +12,9 @@ class Vehicle {
 public:
 
 	map<string, int> lane_direction = { {"PLCL", 1}, {"LCL", 1}, {"LCR", -1}, {"PLCR", -1} };
+
+	float lane_width = 4;
+
 /**/
 	struct collider {
 
