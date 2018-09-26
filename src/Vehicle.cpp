@@ -13,11 +13,14 @@
 
 Vehicle::Vehicle() {}
 
-Vehicle::Vehicle(int lane, float s, float d, float theta, float v, float a, string state) {
-
+Vehicle::Vehicle(int lane, float s, float d, float yaw, float v, float a, string state) {
+/*
+A vehicle object with lane and kinematic data
+*/
 	this->lane = lane;
 	this->s = s;
 	this->d = d;
+	this->yaw = yaw;
 	this->v = v;
 	this->a = a;
 	this->state = state;
@@ -151,7 +154,7 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 	/*
 	Generate a keep lane trajectory.
 	*/
-	vector<Vehicle> trajectory = { Vehicle(lane, this->s, this->d, this->theta, this->v, this->a, state) };
+	vector<Vehicle> trajectory = { Vehicle(lane, this->s, this->d, this->yaw, this->v, this->a, state) };
 	vector<float> kinematics = get_kinematics(predictions, this->lane);
 	float new_s = kinematics[0];
 	float new_v = kinematics[1];
@@ -223,7 +226,11 @@ void Vehicle::increment(int dt = 1) {
 	this->s = position_at(dt);
 }
 
+
 float Vehicle::position_at(int t) {
+	/*
+	Generates the position of the vehicle at a future time
+	*/
 	return this->s + this->v*t + this->a*t*t / 2.0;
 }
 // TODO: change this function to receive data from the simulator
@@ -266,7 +273,6 @@ bool Vehicle::get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane,
 	return found_vehicle;
 }
 
-// TODO: change this function to receive data from the simulator
 vector<Vehicle> Vehicle::generate_predictions(int horizon) {
 	/*
 	Generates predictions for non-ego vehicles to be used
@@ -275,17 +281,14 @@ vector<Vehicle> Vehicle::generate_predictions(int horizon) {
 	vector<Vehicle> predictions;
 	for (int i = 0; i < horizon; i++) {
 		float next_s = position_at(i);
-		float next_v = 0;
-		if (i < horizon - 1) {
-			next_v = position_at(i + 1) - s;
-		}
-		predictions.push_back(Vehicle(this->lane, next_s, next_d, next_theta, next_v, 0));
+		// Assume that the vehicle has a constant velocity over the horizon
+		// TO-DO: Add acceleration
+		predictions.push_back(Vehicle(this->lane, next_s, this->d, this->a, this->v, 0));
 	}
 	return predictions;
-
 }
 
-// TODO: change this function to receive data from the simulator
+// TODO: likely remove this function since we just send a trajectory to the simulator
 void Vehicle::realize_next_state(vector<Vehicle> trajectory) {
 	/*
 	Sets state and kinematics for ego vehicle using the last state of the trajectory.

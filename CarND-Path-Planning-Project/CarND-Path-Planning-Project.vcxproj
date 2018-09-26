@@ -121,14 +121,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\Cost.h" />
     <ClInclude Include="..\src\json.hpp" />
-    <ClInclude Include="Cost.h" />
-    <ClInclude Include="Vehicle.h" />
+    <ClInclude Include="..\src\Vehicle.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\Cost.cpp" />
     <ClCompile Include="..\src\main.cpp" />
-    <ClCompile Include="Cost.cpp" />
-    <ClCompile Include="Vehicle.cpp" />
+    <ClCompile Include="..\src\Vehicle.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

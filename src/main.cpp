@@ -211,18 +211,24 @@ int main() {
   // Start in lane 1;
   int lane = 1;
 
+  // Lane width
+  float lane_width = 4; // meters
+
   // Reference Velocity
   double ref_vel = 49.5; // mph
 
   // Update Rate
   double update_rate = 0.02; // seconds
 
+  Vehicle vehicle = Vehicle();
+
+
 // Needed for backwards compatibility with older uWebSockets version
 #ifdef UWS_VCPKG
-  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
+  h.onMessage([&lane_width,&vehicle,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 #else
-  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&lane_width,&vehicle,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 #endif
     // "42" at the start of the message means there's a websocket message event.
@@ -257,8 +263,48 @@ int main() {
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
 
-          	// Sensor Fusion Data, a list of all other cars on the same side of the road.
+			// Vehicle data
+			vehicle.s = car_s;
+			vehicle.d = car_d;
+			vehicle.v = car_speed;
+			vehicle.yaw = deg2rad(car_yaw);
+			
+			// Sensor Fusion Data, a list of all other cars on the same side of the road.
           	auto sensor_fusion = j[1]["sensor_fusion"];
+
+
+			// A map of predictions for non-ego vehicles
+			map<int, vector<Vehicle>> predictions;
+
+			for (int i = 0; i < sensor_fusion.size(); i++) {
+
+				int id = sensor_fusion[i][0];
+				float x = sensor_fusion[i][1];
+				float y = sensor_fusion[i][2];
+				float vx = sensor_fusion[i][3];
+				float vy = sensor_fusion[i][4];
+				float s = sensor_fusion[i][5];
+				float d = sensor_fusion[i][6];
+
+				Vehicle vehicle;
+				vehicle.v = mag(vx, vy);
+				vehicle.s = s;
+				vehicle.d = d;
+				vehicle.lane = int(ceil(d)) % int(lane_width);
+				vehicle.a = 0; // Assume no acceleration
+
+				//A vector of predictions for a non-ego vehicle
+				vector<Vehicle> prediction = vehicle.generate_predictions();
+
+				predictions.insert(pair<int, vector<Vehicle>>(id, prediction));
+			}
+
+			vehicle.choose_next_state(predictions);
+
+/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+
 
 			// Size of the previous path
 			int prev_size = previous_path_x.size();
@@ -274,7 +320,7 @@ int main() {
 			for (int i = 0; i < sensor_fusion.size(); i++) {
 				// Car is in my lane
 				float d = sensor_fusion[i][6];
-				if (d < (2 + 4 * lane + 2) && d >(2 + 4 * lane - 2)) {
+				if (d < (2 + lane_width * lane + 2) && d >(2 + lane_width * lane - 2)) {
 					double vx = sensor_fusion[i][3];
 					double vy = sensor_fusion[i][4];
 					double check_speed = mag(vx, vy);
@@ -295,8 +341,6 @@ int main() {
 					}
 				}
 			}
-
-
 
 			// Create a list of widely spaced (x,y) waypoints
 			vector<double> ptsx, ptsy;
@@ -400,31 +444,15 @@ int main() {
 				next_y_vals.push_back(y_point);
 			}
 
-			choose_next`
-
           	json msgJson;
 
-			msgJson["next_x"] = next_x_vals;
-			msgJson["next_y"] = next_y_vals;
-
-/*
-          	vector<double> next_x_vals;
-          	vector<double> next_y_vals;
-
-			double dist_inc = 0.5;
-			for (int i = 0; i < 50; i++)
-			{
-				double next_s = car_s + (i + 1)*dist_inc;
-				double next_d = 6;	//6 is the value for the crrent lane
-				vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-				next_x_vals.push_back(xy[0]);
-				next_y_vals.push_back(xy[1]);
-
-			}
+			msgJson["next_x"] = trajectory[0];
+			msgJson["next_y"] = trajectory[1];
 			
-			msgJson["next_x"] = next_x_vals;
-          	msgJson["next_y"] = next_y_vals;
-*/
+/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
 // Needed for backwards compatibility with older uWebSockets version

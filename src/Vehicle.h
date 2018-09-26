@@ -30,7 +30,7 @@ public:
 
 	float d;
 
-	float theta;
+	float yaw;
 
 	float v;
 
