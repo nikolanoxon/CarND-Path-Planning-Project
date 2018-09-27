@@ -22,17 +22,17 @@ minimize lane changes? (not sure if needed)
 
 
 // TODO: change this to penalize any lane change
-float goal_distance_cost(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions, map<string, float> & data) {
+float lane_change_cost(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions) {
 	/*
 	Cost increases based on distance of intended lane (for planning a lane change) and final lane of trajectory.
 	Cost of being out of goal lane also becomes larger as vehicle approaches goal distance.
 	*/
 	float cost;
-	cost = 1 - exp(-(abs(2.0*vehicle.lane - data["intended_lane"] - data["final_lane"])));
+	cost = abs(vehicle.lane - trajectory.back().lane);
 	return cost;
 }
 
-float inefficiency_cost(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions, map<string, float> & data) {
+float inefficiency_cost(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions) {
 	/*
 	Cost becomes higher for trajectories with intended lane and final lane that have traffic slower than vehicle's target speed.
 	*/
@@ -62,48 +62,17 @@ float calculate_cost(const Vehicle & vehicle, const map<int, vector<Vehicle>> & 
 	/*
 	Sum weighted cost functions to get total cost for trajectory.
 	*/
-	map<string, float> trajectory_data = get_helper_data(vehicle, trajectory, predictions);
 	float cost = 0.0;
 
 	//Add additional cost functions here.
-	vector< function<float(const Vehicle &, const vector<Vehicle> &, const map<int, vector<Vehicle>> &, map<string, float> &)>> cf_list = { goal_distance_cost, inefficiency_cost };
+	vector< function<float(const Vehicle &, const vector<Vehicle> &, const map<int, vector<Vehicle>> &)>> cf_list = { lane_change_cost, inefficiency_cost };
 	vector<float> weight_list = { REACH_GOAL, EFFICIENCY };
 
 	for (int i = 0; i < cf_list.size(); i++) {
-		float new_cost = weight_list[i] * cf_list[i](vehicle, trajectory, predictions, trajectory_data);
+		float new_cost = weight_list[i] * cf_list[i](vehicle, trajectory, predictions);
 		cost += new_cost;
 	}
 
 	return cost;
 
 }
-// TODO: evaluate if this function is still needed
-map<string, float> get_helper_data(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions) {
-	/*
-	Generate helper data to use in cost functions:
-	indended_lane: the current lane +/- 1 if vehicle is planning or executing a lane change.
-	final_lane: the lane of the vehicle at the end of the trajectory.
-
-	Note that indended_lane and final_lane are both included to help differentiate between planning and executing
-	a lane change in the cost functions.
-	*/
-	map<string, float> trajectory_data;
-	Vehicle trajectory_last = trajectory[1];
-	float intended_lane;
-
-	if (trajectory_last.state.compare("PLCL") == 0) {
-		intended_lane = trajectory_last.lane + 1;
-	}
-	else if (trajectory_last.state.compare("PLCR") == 0) {
-		intended_lane = trajectory_last.lane - 1;
-	}
-	else {
-		intended_lane = trajectory_last.lane;
-	}
-
-	float final_lane = trajectory_last.lane;
-	trajectory_data["intended_lane"] = intended_lane;
-	trajectory_data["final_lane"] = final_lane;
-	return trajectory_data;
-}
-

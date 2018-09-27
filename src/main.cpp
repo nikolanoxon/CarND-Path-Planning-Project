@@ -246,6 +246,7 @@ int main() {
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
+
           	// Previous path's end s and d values 
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
@@ -289,22 +290,17 @@ int main() {
 
 			vector<Vehicle> best_trajectory = vehicle.choose_next_state(predictions);
 
+			// The vehicle trajectory in 1 second
 			float next_s = best_trajectory[1].s;
 			float next_d = best_trajectory[1].d;
+			float next_v = best_trajectory[1].v;
 			float next_lane = best_trajectory[1].lane;
 
 			cout << "ACTUAL s: " << car_s << "   d: " << car_d << "   lane: " << vehicle.lane << endl;
 			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   lane: " << next_lane << endl;
 
-			//TODO: best trajectory is always "KL"
+			//TODO: fix that best trajectory is always "KL"
 			//cout << best_trajectory[1].state << endl;
-
-			// Size of the previous path
-			int prev_size = previous_path_x.size();
-
-			if (prev_size > 0) {
-				car_s = end_path_s;
-			}
 
 			// Create a list of widely spaced (x,y) waypoints
 			vector<double> ptsx, ptsy;
@@ -314,11 +310,18 @@ int main() {
 			double ref_y = car_y;
 			double ref_yaw = deg2rad(car_yaw);
 
+			// Size of the previous path
+			int prev_size = previous_path_x.size();
+
+			if (prev_size > 0) {
+				car_s = end_path_s;
+			}
 			// If previous state is almost empty, use the car as the starting point
 			if (prev_size < 2) {
 				// Use 2 points that make the path tangent to the car
-				double prev_car_x = car_x - cos(car_yaw);
-				double prev_car_y = car_y - sin(car_yaw);
+				// 
+				double prev_car_x = car_x - cos(car_yaw) * next_v * vehicle.dt;
+				double prev_car_y = car_y - sin(car_yaw) * next_v * vehicle.dt;
 
 				ptsx.push_back(prev_car_x);
 				ptsx.push_back(car_x);
@@ -341,13 +344,12 @@ int main() {
 				ptsy.push_back(ref_y);
 			}
 
-			// In Frenet add evenly 30m spaced points ahead of the starting reference
-			vector<double> next_wp0 = getXY(car_s + next_s*0.33, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(car_s + next_s*0.66, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp2 = getXY(car_s + next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			//vector<double> next_wp0 = getXY(car_s + 0.25*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			//vector<double> next_wp1 = getXY(car_s + 0.5*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			//vector<double> next_wp2 = getXY(car_s + 0.75*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+			// In Frenet add evenly spaced points ahead of the starting reference
+			// TODO: somehow the next_s is behind the starting position
+			vector<double> next_wp0 = getXY(next_s/3.0, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(next_s/2.0, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp2 = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
 
 			ptsx.push_back(next_wp0[0]);
@@ -357,7 +359,7 @@ int main() {
 			ptsy.push_back(next_wp0[1]);
 			ptsy.push_back(next_wp1[1]);
 			ptsy.push_back(next_wp2[1]);
-
+			
 			for (int i = 0; i < ptsx.size(); ++i) {
 				// Shift car reference point to 0
 				double shift_x = ptsx[i] - ref_x;
@@ -384,14 +386,14 @@ int main() {
 			}
 
 			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = 0.33*next_s;
+			double target_x = next_s;
 			double target_y = s(target_x);
 			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
 			double x_add_on = 0;
 
 			// Fill up the rest of our path planner after filling it with previous points
 			for (int i = 1; i <= 50 - previous_path_x.size(); ++i) {
-				double N = target_dist / (vehicle.dt*vehicle.target_speed);
+				double N = target_dist / (vehicle.dt*next_v);
 				double x_point = x_add_on + target_x / N;
 				double y_point = s(x_point);
 

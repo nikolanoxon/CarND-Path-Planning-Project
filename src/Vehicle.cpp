@@ -49,13 +49,13 @@ vector<Vehicle> Vehicle::choose_next_state(map<int, vector<Vehicle>> predictions
 	vector<vector<Vehicle>> final_trajectories;
 
 	for (vector<string>::iterator it = states.begin(); it != states.end(); ++it) {
-		vector<Vehicle> trajectory = generate_trajectory(*it, predictions);
-		if (trajectory.size() != 0) {
-			cost = calculate_cost(*this, predictions, trajectory);
-			costs.push_back(cost);
-			final_trajectories.push_back(trajectory);
-			//cout << "state: " << *it << "   cost: " << cost << endl;
-		}
+vector<Vehicle> trajectory = generate_trajectory(*it, predictions);
+if (trajectory.size() != 0) {
+	cost = calculate_cost(*this, predictions, trajectory);
+	costs.push_back(cost);
+	final_trajectories.push_back(trajectory);
+	//cout << "state: " << *it << "   cost: " << cost << endl;
+}
 	}
 
 	vector<float>::iterator best_cost = min_element(begin(costs), end(costs));
@@ -120,59 +120,80 @@ vector<Vehicle> Vehicle::generate_trajectory(string state, map<int, vector<Vehic
 	return trajectory;
 }
 
-
-//TODO add jerk limitation
 vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predictions)
 {
+	/*
+	INPUT: A predictions map of the trajectories of other vehicles
+	OUTPUT: A trajectory
+	*/
+
 	// Check if there is a vehicle ahead in our lane within the horizon
 	// From math, I know that given the target speed of 50 mph, if I encountered a vehicle at a
 	// standstill I would need 32 meters to brake at max decel rate. So let's set the lookahead distance to
 	// 50 meters
 	// If there is no target, try to get to set speed
 
-	float min_s = this->s + 50;	// meters
+	float s_min = this->s + 50;	// meters
 
-	for (map<int, vector<Vehicle>>::iterator it = predictions.begin; it != predictions.end; ++it) {
-		// Check if there is a vehicle in this lane within the minimum distance
-		if (it->second[0].lane == this->lane && it->second[0].s < min_s) {
+	float a_new, v_new, d_new, s_new;
+
+	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
+
+
+	// Check if there is a vehicle in this lane within the minimum distance
+	for (map<int, vector<Vehicle>>::iterator it = predictions.begin(); it != predictions.end(); ++it) {
+		if (it->second[0].lane == this->lane && it->second[0].s < s_min) {
 			// Set speed to the ahead vehicle speed
-			this->v = min(this->target_speed, it->second[0].v);
+			//TODO add jerk limitation
+			v_new = min(this->target_speed, it->second[0].v);
+			// Set the new closest vehicle
+			s_min = it->second[0].s;
+		}
+		// If there's no vehicle in front, accelerate to top speed
+		else {
+			v_new = this->v_max;
 		}
 	}
 
+	d_new = (this->lane + 0.5) * this->lane_width;
+	// TODO: Move this calculation since we'll be using it a lot
+	s_new = this->s + v_new * dt;
 
-	if (this->v < this->target_speed) {
-
-	
-	}
-
-	return vector<Vehicle>();
+	trajectory.push_back(Vehicle(this->lane, s_new, d_new, this->yaw, v_new, this->a, this->state));
+	return trajectory;
 }
 
 vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions)
 {
-	return vector<Vehicle>();
+	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
+
+	return trajectory;
 }
 
 vector<Vehicle> Vehicle::prep_lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions)
 {
-	return vector<Vehicle>();
+	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
+	trajectory.push_back(Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state));
+	return trajectory;
 }
 
-void Vehicle::increment(int dt)
+Vehicle Vehicle::increment(float dt)
 {
-	float a_new = this->a + this->max_j * this->dt;
-	float v_new = this->v + this->a * this->dt + 0.5 * this->j * pow(this->dt, 2);
-	float s_new = this->s + this->v * this->dt + 0.5 * this->a * pow(this->dt, 2) + 1.0 / 6 * this->j * pow(this->dt, 3);
+	/*
+	Moves a vehicle forward one timestep
+	*/
+	float a_new = this->a + this->j * dt;
+	float v_new = this->v + this->a * dt + 0.5 * this->j * pow(dt, 2);
+	float s_new = this->s + this->v * dt + 0.5 * this->a * pow(dt, 2) + 1.0 / 6 * this->j * pow(dt, 3);
 
-	this->a = a_new;
-	this->v = v_new;
-	this->s = s_new;
-}
+	// constrain the acceleration and velocity to the max allowable values
+	a_new = min(a_new, this->a_max);
+	v_new = min(v_new, this->v_max);
 
-float Vehicle::position_at(int t)
-{
-	return 0.0f;
+
+	float d_new = (this->lane + 0.5) * this->lane_width;
+
+	return Vehicle(this->lane, s_new, d_new, this->yaw, v_new, a_new, this->state);
 }
 
 bool Vehicle::get_vehicle_behind(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle)
@@ -187,7 +208,15 @@ bool Vehicle::get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane,
 
 vector<Vehicle> Vehicle::generate_predictions(int horizon)
 {
-	return vector<Vehicle>();
+	/*
+	Generates a vector of predicted states for a vehicle with 1 second intervals.
+	The length of the prediction is equal to the horizon (in seconds).
+	*/
+	vector<Vehicle> predictions;
+	for (int i = 0; i < horizon; ++i) {
+		predictions.push_back(increment(i));
+	}
+	return predictions;
 }
 
 void Vehicle::realize_next_state(vector<Vehicle> trajectory)

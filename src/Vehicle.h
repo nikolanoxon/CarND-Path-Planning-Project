@@ -35,13 +35,13 @@ public:
 
 	int lanes_available = 3;
 
-	float max_v = 50.0 / 2.24;
+	float v_max = 50.0 / 2.24;
 
-	float max_a = 10; //	m/s^2
+	float a_max = 10; //	m/s^2
 
-	float max_j = 10; //	m/s^3;
+	float j_max = 10; //	m/s^3;
 
-	float target_speed = max_v; //	m/s
+	float target_speed = v_max; //	m/s
 
 	string state = "KL";
 
@@ -68,9 +68,7 @@ public:
 
 	vector<Vehicle> prep_lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions);
 
-	void increment(int dt);
-
-	float position_at(int t);
+	Vehicle increment(float dt);
 
 	bool get_vehicle_behind(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle);
 
