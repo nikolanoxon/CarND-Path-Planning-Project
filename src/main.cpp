@@ -207,28 +207,15 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-
-  // Start in lane 1;
-  int lane = 1;
-
-  // Lane width
-//  float lane_width = 4; // meters
-
-  // Reference Velocity
-  double ref_vel = 49.5; // mph
-
-  // Update Rate
-  double update_rate = 0.02; // seconds
-
   Vehicle vehicle = Vehicle();
-
+  vehicle.lane = 1;
 
 // Needed for backwards compatibility with older uWebSockets version
 #ifdef UWS_VCPKG
-  h.onMessage([&vehicle,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
+  h.onMessage([&vehicle,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 #else
-  h.onMessage([&vehicle,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&update_rate](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&vehicle,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 #endif
     // "42" at the start of the message means there's a websocket message event.
@@ -269,9 +256,9 @@ int main() {
 			// Vehicle data
 			vehicle.s = car_s;
 			vehicle.d = car_d;
-			vehicle.v = car_speed;
+			vehicle.v = car_speed / 2.24;
 			vehicle.yaw = deg2rad(car_yaw);
-			vehicle.target_speed = ref_vel;
+			vehicle.lane = int(floor((vehicle.d / vehicle.lane_width)));
 
 
 			// A map of predictions for non-ego vehicles
@@ -291,7 +278,7 @@ int main() {
 				road_vehicle.v = mag(vx, vy);
 				road_vehicle.s = s;
 				road_vehicle.d = d;
-				road_vehicle.lane = int(ceil(d)) % int(vehicle.lane_width);
+				road_vehicle.lane = int(floor((d / vehicle.lane_width)));
 				road_vehicle.a = 0; // Assume no acceleration
 
 				//A vector of predictions for a non-ego vehicle
@@ -306,8 +293,11 @@ int main() {
 			float next_d = best_trajectory[1].d;
 			float next_lane = best_trajectory[1].lane;
 
+			cout << "ACTUAL s: " << car_s << "   d: " << car_d << "   lane: " << vehicle.lane << endl;
+			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   lane: " << next_lane << endl;
+
 			//TODO: best trajectory is always "KL"
-			cout << best_trajectory[1].state << endl;
+			//cout << best_trajectory[1].state << endl;
 
 			// Size of the previous path
 			int prev_size = previous_path_x.size();
@@ -352,9 +342,12 @@ int main() {
 			}
 
 			// In Frenet add evenly 30m spaced points ahead of the starting reference
-			vector<double> next_wp0 = getXY(car_s + 0.25*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(car_s + 0.5*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp2 = getXY(car_s + 0.75*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp0 = getXY(car_s + next_s*0.33, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(car_s + next_s*0.66, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp2 = getXY(car_s + next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			//vector<double> next_wp0 = getXY(car_s + 0.25*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			//vector<double> next_wp1 = getXY(car_s + 0.5*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			//vector<double> next_wp2 = getXY(car_s + 0.75*next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
 
 			ptsx.push_back(next_wp0[0]);
@@ -391,15 +384,14 @@ int main() {
 			}
 
 			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = next_s;
+			double target_x = 0.33*next_s;
 			double target_y = s(target_x);
 			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
 			double x_add_on = 0;
 
 			// Fill up the rest of our path planner after filling it with previous points
 			for (int i = 1; i <= 50 - previous_path_x.size(); ++i) {
-				double ref_vel_mps = ref_vel / 2.24;
-				double N = target_dist / (update_rate*ref_vel_mps);
+				double N = target_dist / (vehicle.dt*vehicle.target_speed);
 				double x_point = x_add_on + target_x / N;
 				double y_point = s(x_point);
 

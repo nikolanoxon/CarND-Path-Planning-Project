@@ -28,7 +28,7 @@ float goal_distance_cost(const Vehicle & vehicle, const vector<Vehicle> & trajec
 	Cost of being out of goal lane also becomes larger as vehicle approaches goal distance.
 	*/
 	float cost;
-	cost = 1 - 2 * exp(-(abs(2.0*vehicle.lane - data["intended_lane"] - data["final_lane"])));
+	cost = 1 - exp(-(abs(2.0*vehicle.lane - data["intended_lane"] - data["final_lane"])));
 	return cost;
 }
 
@@ -36,18 +36,8 @@ float inefficiency_cost(const Vehicle & vehicle, const vector<Vehicle> & traject
 	/*
 	Cost becomes higher for trajectories with intended lane and final lane that have traffic slower than vehicle's target speed.
 	*/
-	//TODO: rewrite this so that it looks for the vehicle in the intended lane with the smallest positive s value
-	float proposed_speed_intended = lane_speed(predictions, data["intended_lane"]);
-	if (proposed_speed_intended < 0) {
-		proposed_speed_intended = vehicle.target_speed;
-	}
 
-	float proposed_speed_final = lane_speed(predictions, data["final_lane"]);
-	if (proposed_speed_final < 0) {
-		proposed_speed_final = vehicle.target_speed;
-	}
-
-	float cost = (2.0*vehicle.target_speed - proposed_speed_intended - proposed_speed_final) / vehicle.target_speed;
+	float cost = (vehicle.target_speed - trajectory[1].v) / vehicle.target_speed;
 
 	return cost;
 }
@@ -60,7 +50,7 @@ float lane_speed(const map<int, vector<Vehicle>> & predictions, int lane) {
 	for (map<int, vector<Vehicle>>::const_iterator it = predictions.begin(); it != predictions.end(); ++it) {
 		int key = it->first;
 		Vehicle vehicle = it->second[0];
-		if (vehicle.lane == lane && key != -1) {
+		if (vehicle.lane == lane && key != -1 ) {
 			return vehicle.v;
 		}
 	}

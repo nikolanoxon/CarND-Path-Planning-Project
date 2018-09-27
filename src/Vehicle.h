@@ -15,17 +15,9 @@ public:
 
 	float lane_width = 4;
 
-/**/
-	struct collider {
+	float dt = 0.02; // cycle time (sec)
 
-		bool collision; // is there a collision?
-		int  time; // time collision happens
-
-	};
-
-	int L = 1;
-
-	int preferred_buffer = 6; // impacts "keep lane" behavior.
+	int preferred_buffer = 6; // meters
 
 	int lane;
 
@@ -39,23 +31,25 @@ public:
 
 	float a;
 
-	float target_speed;
+	float j;
 
-	int lanes_available;
+	int lanes_available = 3;
 
-	float max_acceleration;
+	float max_v = 50.0 / 2.24;
 
-	int goal_lane;
+	float max_a = 10; //	m/s^2
 
-	int goal_s;
+	float max_j = 10; //	m/s^3;
 
-	string state;
+	float target_speed = max_v; //	m/s
+
+	string state = "KL";
 
 	/**
 	* Constructor
 	*/
 	Vehicle();
-	Vehicle(int lane, float s, float d, float theta, float v, float a, string state = "KL");
+	Vehicle(int lane, float s, float d, float theta, float v, float a, string state);
 
 	/**
 	* Destructor
@@ -67,8 +61,6 @@ public:
 	vector<string> successor_states();
 
 	vector<Vehicle> generate_trajectory(string state, map<int, vector<Vehicle>> predictions);
-
-	vector<float> get_kinematics(map<int, vector<Vehicle>> predictions, int lane);
 
 	vector<Vehicle> keep_lane_trajectory(map<int, vector<Vehicle>> predictions);
 
