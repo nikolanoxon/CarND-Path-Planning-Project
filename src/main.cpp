@@ -295,7 +295,7 @@ int main() {
 			float next_d = best_trajectory[1].d;
 			float next_v = best_trajectory[1].v;
 			float next_lane = best_trajectory[1].lane;
-
+			float delta_s = next_s - car_s;
 			cout << "ACTUAL s: " << car_s << "   d: " << car_d << "   lane: " << vehicle.lane << endl;
 			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   lane: " << next_lane << endl;
 
@@ -310,45 +310,21 @@ int main() {
 			double ref_y = car_y;
 			double ref_yaw = deg2rad(car_yaw);
 
-			// Size of the previous path
-			int prev_size = previous_path_x.size();
+			// Use 2 points that make the path tangent to the car
+			double next_car_x = car_x + cos(car_yaw) * next_v * vehicle.dt;
+			double next_car_y = car_y + sin(car_yaw) * next_v * vehicle.dt;
 
-			if (prev_size > 0) {
-				car_s = end_path_s;
-			}
-			// If previous state is almost empty, use the car as the starting point
-			if (prev_size < 2) {
-				// Use 2 points that make the path tangent to the car
-				// 
-				double prev_car_x = car_x - cos(car_yaw) * next_v * vehicle.dt;
-				double prev_car_y = car_y - sin(car_yaw) * next_v * vehicle.dt;
+			ptsx.push_back(car_x);
+			ptsx.push_back(next_car_x);
+			ptsy.push_back(car_y);
+			ptsy.push_back(next_car_y);
 
-				ptsx.push_back(prev_car_x);
-				ptsx.push_back(car_x);
-				ptsy.push_back(prev_car_y);
-				ptsy.push_back(car_y);
-			}
-			// Otherwise use the previous path's endpoint as starting reference
-			else {
-				ref_x = previous_path_x[prev_size - 1];
-				ref_y = previous_path_y[prev_size - 1];
-				
-				double ref_x_prev = previous_path_x[prev_size - 2];
-				double ref_y_prev = previous_path_y[prev_size - 2];
-				ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
-
-				// Use two points that make the path tangent to the previous path's end point
-				ptsx.push_back(ref_x_prev);
-				ptsx.push_back(ref_x);
-				ptsy.push_back(ref_y_prev);
-				ptsy.push_back(ref_y);
-			}
 
 
 			// In Frenet add evenly spaced points ahead of the starting reference
 			// TODO: somehow the next_s is behind the starting position
-			vector<double> next_wp0 = getXY(next_s/3.0, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(next_s/2.0, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp0 = getXY(car_s + delta_s/3.0, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(car_s + delta_s /2.0, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 			vector<double> next_wp2 = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
 
@@ -386,13 +362,13 @@ int main() {
 			}
 
 			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = next_s;
+			double target_x = delta_s;
 			double target_y = s(target_x);
 			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
 			double x_add_on = 0;
 
 			// Fill up the rest of our path planner after filling it with previous points
-			for (int i = 1; i <= 50 - previous_path_x.size(); ++i) {
+			for (int i = 1; i <= 50; ++i) {
 				double N = target_dist / (vehicle.dt*next_v);
 				double x_point = x_add_on + target_x / N;
 				double y_point = s(x_point);

@@ -49,13 +49,13 @@ vector<Vehicle> Vehicle::choose_next_state(map<int, vector<Vehicle>> predictions
 	vector<vector<Vehicle>> final_trajectories;
 
 	for (vector<string>::iterator it = states.begin(); it != states.end(); ++it) {
-vector<Vehicle> trajectory = generate_trajectory(*it, predictions);
-if (trajectory.size() != 0) {
-	cost = calculate_cost(*this, predictions, trajectory);
-	costs.push_back(cost);
-	final_trajectories.push_back(trajectory);
-	//cout << "state: " << *it << "   cost: " << cost << endl;
-}
+		vector<Vehicle> trajectory = generate_trajectory(*it, predictions);
+		if (trajectory.size() != 0) {
+			cost = calculate_cost(*this, predictions, trajectory);
+			costs.push_back(cost);
+			final_trajectories.push_back(trajectory);
+			cout << "state: " << *it << "   cost: " << cost << endl;
+		}
 	}
 
 	vector<float>::iterator best_cost = min_element(begin(costs), end(costs));
@@ -70,6 +70,7 @@ vector<string> Vehicle::successor_states() {
 	vector<string> states;
 	states.push_back("KL");
 	string state = this->state;
+	/*
 	if (state.compare("KL") == 0) {
 		if (lane != lanes_available - 1) {
 			states.push_back("PLCR");
@@ -100,6 +101,7 @@ vector<string> Vehicle::successor_states() {
 			states.push_back("LCR");
 		}
 	}
+	*/
 	return states;
 }
 
@@ -156,8 +158,10 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 	}
 
 	d_new = (this->lane + 0.5) * this->lane_width;
+
+	// State in 1 second
 	// TODO: Move this calculation since we'll be using it a lot
-	s_new = this->s + v_new * dt;
+	s_new = this->s + v_new;
 
 	trajectory.push_back(Vehicle(this->lane, s_new, d_new, this->yaw, v_new, this->a, this->state));
 	return trajectory;
