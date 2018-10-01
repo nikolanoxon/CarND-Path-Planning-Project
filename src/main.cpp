@@ -4,15 +4,20 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
+#include <cmath>
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
+#include "Eigen-3.3/Eigen/Dense"
 #include "json.hpp"
 #include "spline.h"
 #include "Cost.h"
 #include "Vehicle.h"
 
+
 using namespace std;
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
 
 // for convenience
 using json = nlohmann::json;
@@ -170,6 +175,57 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
+vector<double> JMT(vector< double> start, vector <double> end, double T)
+{
+	/*
+	Calculate the Jerk Minimizing Trajectory that connects the initial state
+	to the final state in time T.
+
+	INPUTS
+
+	start - the vehicles start location given as a length three array
+		corresponding to initial values of [s, s_dot, s_double_dot]
+
+	end   - the desired end state for vehicle. Like "start" this is a
+		length three array.
+
+	T     - The duration, in seconds, over which this maneuver should occur.
+
+	OUTPUT
+	an array of length 6, each value corresponding to a coefficent in the polynomial
+	s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
+
+	EXAMPLE
+
+	> JMT( [0, 10, 0], [10, 10, 0], 1)
+	[0.0, 10.0, 0.0, 0.0, 0.0, 0.0]
+	*/
+
+	MatrixXd A = MatrixXd(3, 3);
+	A << T * T*T, T*T*T*T, T*T*T*T*T,
+		3 * T*T, 4 * T*T*T, 5 * T*T*T*T,
+		6 * T, 12 * T*T, 20 * T*T*T;
+
+	MatrixXd B = MatrixXd(3, 1);
+	B << end[0] - (start[0] + start[1] * T + .5*start[2] * T*T),
+		end[1] - (start[1] + start[2] * T),
+		end[2] - start[2];
+
+	MatrixXd Ai = A.inverse();
+
+	MatrixXd C = Ai * B;
+
+	vector <double> result = { start[0], start[1], .5*start[2] };
+	for (int i = 0; i < C.size(); i++)
+	{
+		result.push_back(C.data()[i]);
+	}
+
+	return result;
+
+}
+
+
 int main() {
   uWS::Hub h;
 
@@ -240,8 +296,9 @@ int main() {
           	double car_y = j[1]["y"];
           	double car_s = j[1]["s"];
           	double car_d = j[1]["d"];
+			double car_a = j[1]["a"];
           	double car_yaw = j[1]["yaw"];
-          	double car_speed = j[1]["speed"];
+          	double car_speed = j[1]["speed"] / 2.24;
 
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
@@ -257,7 +314,8 @@ int main() {
 			// Vehicle data
 			vehicle.s = car_s;
 			vehicle.d = car_d;
-			vehicle.v = vehicle.target_speed;
+			vehicle.a = (car_speed - vehicle.v);
+			vehicle.v = car_speed;
 			vehicle.yaw = deg2rad(car_yaw);
 			vehicle.lane = int(floor((vehicle.d / vehicle.lane_width)));
 
@@ -288,9 +346,9 @@ int main() {
 				predictions.insert(pair<int, vector<Vehicle>>(id, prediction));
 			} 
 
+			// The vehicle trajectory in 5 seconds
 			vector<Vehicle> best_trajectory = vehicle.choose_next_state(predictions);
 
-			// The vehicle trajectory in 1 second
 			float next_s = best_trajectory[1].s;
 			float next_d = best_trajectory[1].d;
 			float next_v = best_trajectory[1].v;
@@ -310,7 +368,7 @@ int main() {
 
 			int prev_size = previous_path_x.size();
 
-			cout << "ACTUAL s: " << car_s << "   d: " << car_d << "   yaw: " << ref_yaw << "   lane: " << vehicle.lane << endl;
+			cout << "ACTUAL s: " << vehicle.s << "   d: " << vehicle.d << "   v: " << vehicle.v << "   a: " << vehicle.a << "   lane: " << vehicle.lane << endl;
 			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   lane: " << next_lane << endl;
 			cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
 
@@ -347,9 +405,9 @@ int main() {
 
 
 			// In Frenet add evenly spaced points ahead of the starting reference
-			vector<double> next_wp0 = getXY(car_s + 40, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(car_s + 80, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp2 = getXY(car_s + 120, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp0 = getXY(car_s + 30, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(car_s + 60, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp2 = getXY(car_s + 90, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 			/*
 			vector<double> next_wp0 = getXY(car_s + delta_s / 3.0, car_d + delta_d / 3.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 			vector<double> next_wp1 = getXY(car_s + delta_s / 2.0, car_d + delta_d / 2.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
@@ -381,25 +439,75 @@ int main() {
 			s.set_points(ptsx, ptsy);
 
 			// Define the actual (x,y) points we will use for the planner
-			vector<double> next_x_vals, next_y_vals;
+			vector<double> next_x_vals, next_y_vals, next_v_vals, next_a_vals;
 
+
+/*
 			// Start with all the previous points from  the last time
 			for (int i = 0; i < prev_size; ++i) {
 				next_x_vals.push_back(previous_path_x[i]);
 				next_y_vals.push_back(previous_path_y[i]);
 			}
+*/
 
-			
 
 			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = 30;
+			double target_x = 90;
 			double target_y = s(target_x);
 			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
 			double x_add_on = 0;
 
+			// Calculate the JMT to smoothly move to the next point
+
+/*
+			// Adjust the starting point
+			if (prev_size > 0) {
+				start_x = next_x_vals[prev_size - 1] - ref_x;
+			}
+*/
+
+			vector<double> start = { 0, vehicle.v, vehicle.a };
+			vector<double> end = { target_x, 10.0, 0.0 };
+			double T = 5.0;
+			vector<double> A = JMT(start, end, T);
+			
+			// s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
+
+			// Plan a trajectory 1 second ahead
+			// TODO: fix this JMT outlook
+//			for (int i = 1; i <= 50 - prev_size; ++i) {
+			for (int i = 1; i <= 50; ++i) {
+//				double x_point = 0;
+//				for (int j = 0; j < A.size(); j++) {
+//					x_point += A[j] * pow(dt * i, j);
+//				}
+				double t = i * vehicle.dt;
+				double x_point = A[0] + A[1] * t + A[2] * pow(t,2) + A[3] * pow(t, 3) + A[4] * pow(t, 4) + A[5] * pow(t, 5);
+				double y_point = s(x_point);
+				double v_point = A[1] + A[2] * t + A[3] * pow(t, 2) + A[4] * pow(t, 3) + A[5] * pow(t, 4);
+				double a_point = A[2] + A[3] * t + A[4] * pow(t, 2) + A[5] * pow(t, 3);
+
+				double x_ref = x_point;
+				double y_ref = y_point;
+
+				// Un-shift back to normal
+				x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
+				y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
+
+				x_point += ref_x;
+				y_point += ref_y;
+
+				next_x_vals.push_back(x_point);
+				next_y_vals.push_back(y_point);
+				next_v_vals.push_back(v_point);
+				next_a_vals.push_back(a_point);
+
+			}
+
+
+/*
 			// Fill up the rest of our path planner after filling it with previous points
 			for (int i = 1; i <= 50 - prev_size; ++i) {
-//			for (int i = 1; i <= 50; ++i) {
 				double N = target_dist / (vehicle.dt*next_v);
 				double x_point = x_add_on + target_x / N;
 				double y_point = s(x_point);
@@ -419,6 +527,8 @@ int main() {
 				next_x_vals.push_back(x_point);
 				next_y_vals.push_back(y_point);
 			}
+*/
+
 
           	json msgJson;
 			// TODO: vehicle does not follow spline

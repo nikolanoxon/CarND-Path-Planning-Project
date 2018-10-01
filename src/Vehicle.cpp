@@ -126,7 +126,7 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 {
 	/*
 	INPUT: A predictions map of the trajectories of other vehicles
-	OUTPUT: A trajectory
+	OUTPUT: A waypoint 5 seconds in the future
 	*/
 
 	// Check if there is a vehicle ahead in our lane within the horizon
@@ -142,7 +142,7 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
 
 	// If there's no vehicle in front, accelerate to top speed
-	v_new = this->v_max;
+	v_new = this->target_speed;
 
 	// Check if there will be a vehicle in this lane within the minimum distance
 	for (map<int, vector<Vehicle>>::iterator it = predictions.begin(); it != predictions.end(); ++it) {
@@ -160,8 +160,9 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 	// State in 5 seconds
 	// TODO: Move this calculation since we'll be using it a lot
 	s_new = this->s + v_new*5;
+	a_new = 0;
 
-	trajectory.push_back(Vehicle(this->lane, s_new, d_new, this->yaw, v_new, this->a, this->state));
+	trajectory.push_back(Vehicle(this->lane, s_new, d_new, this->yaw, v_new, a_new, this->state));
 	return trajectory;
 }
 
