@@ -247,8 +247,6 @@ int main() {
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
 
-			vector<float> dah_x = previous_path_x;
-
           	// Previous path's end s and d values 
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
@@ -300,7 +298,6 @@ int main() {
 			float delta_s = next_s - car_s;
 			float delta_d = next_d - car_d;
 
-			//TODO: fix that best trajectory is always "KL"
 			//cout << best_trajectory[1].state << endl;
 
 			// Create a list of widely spaced (x,y) waypoints
@@ -313,9 +310,9 @@ int main() {
 
 			int prev_size = previous_path_x.size();
 
-			cout << "ACTUAL s: " << car_s << "   d: " << car_d << "   lane: " << vehicle.lane << endl;
-			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   lane: " << next_lane << endl;
-
+			cout << "ACTUAL s: " << car_s << "   d: " << car_d << "   yaw: " << ref_yaw << "   lane: " << vehicle.lane << endl;
+			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   lane: " << next_lane << endl;
+			cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
 
 			if (prev_size < 2) {
 
@@ -330,14 +327,14 @@ int main() {
 
 			}
 			else {
-				ref_x = previous_path_x[1];
-				ref_y = previous_path_y[1];
+				ref_x = previous_path_x[prev_size - 1];
+				ref_y = previous_path_y[prev_size - 1];
 
-				double prev_ref_x = previous_path_x[0];
-				double prev_ref_y = previous_path_y[0];
+				double prev_ref_x = previous_path_x[prev_size - 2];
+				double prev_ref_y = previous_path_y[prev_size - 2];
 
-				cout << "PREV X -2: " << prev_ref_x << "   -1: " << ref_x << endl;
-				cout << "PREV Y -2: " << prev_ref_y << "   -1: " << ref_y << endl;
+//				cout << "PREV X -2: " << prev_ref_x << "   -1: " << ref_x << endl;
+//				cout << "PREV Y -2: " << prev_ref_y << "   -1: " << ref_y << endl;
 
 				ref_yaw = atan2(ref_y - prev_ref_y, ref_x - prev_ref_x);
 
@@ -350,10 +347,14 @@ int main() {
 
 
 			// In Frenet add evenly spaced points ahead of the starting reference
+			vector<double> next_wp0 = getXY(car_s + 40, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(car_s + 80, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp2 = getXY(car_s + 120, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			/*
 			vector<double> next_wp0 = getXY(car_s + delta_s / 3.0, car_d + delta_d / 3.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 			vector<double> next_wp1 = getXY(car_s + delta_s / 2.0, car_d + delta_d / 2.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 			vector<double> next_wp2 = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-
+			*/
 
 			ptsx.push_back(next_wp0[0]);
 			ptsx.push_back(next_wp1[0]);
@@ -365,8 +366,8 @@ int main() {
 			
 			for (int i = 0; i < ptsx.size(); ++i) {
 				// Shift car reference point to 0
-				double shift_x = ptsx[i] - car_x;
-				double shift_y = ptsy[i] - car_y;
+				double shift_x = ptsx[i] - ref_x;
+				double shift_y = ptsy[i] - ref_y;
 
 				// Shift car reference angle to 0
 				ptsx[i] = (shift_x*cos(-ref_yaw) - shift_y * sin(-ref_yaw));
@@ -382,26 +383,23 @@ int main() {
 			// Define the actual (x,y) points we will use for the planner
 			vector<double> next_x_vals, next_y_vals;
 
-			
-/*
-
 			// Start with all the previous points from  the last time
 			for (int i = 0; i < prev_size; ++i) {
 				next_x_vals.push_back(previous_path_x[i]);
 				next_y_vals.push_back(previous_path_y[i]);
 			}
-*/
+
 			
 
 			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = delta_s;
+			double target_x = 30;
 			double target_y = s(target_x);
 			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
 			double x_add_on = 0;
 
 			// Fill up the rest of our path planner after filling it with previous points
-//			for (int i = 1; i <= 50 - prev_size; ++i) {
-			for (int i = 1; i <= 50; ++i) {
+			for (int i = 1; i <= 50 - prev_size; ++i) {
+//			for (int i = 1; i <= 50; ++i) {
 				double N = target_dist / (vehicle.dt*next_v);
 				double x_point = x_add_on + target_x / N;
 				double y_point = s(x_point);

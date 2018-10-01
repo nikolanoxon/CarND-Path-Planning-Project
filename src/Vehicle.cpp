@@ -141,6 +141,8 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 
 	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
 
+	// If there's no vehicle in front, accelerate to top speed
+	v_new = this->v_max;
 
 	// Check if there will be a vehicle in this lane within the minimum distance
 	for (map<int, vector<Vehicle>>::iterator it = predictions.begin(); it != predictions.end(); ++it) {
@@ -151,17 +153,13 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 			// Set the new closest vehicle
 			s_min = it->second[1].s;
 		}
-		// If there's no vehicle in front, accelerate to top speed
-		else {
-			v_new = this->v_max;
-		}
 	}
 
 	d_new = (this->lane + 0.5) * this->lane_width;
 
-	// State in 1 second
+	// State in 5 seconds
 	// TODO: Move this calculation since we'll be using it a lot
-	s_new = this->s + v_new;
+	s_new = this->s + v_new*5;
 
 	trajectory.push_back(Vehicle(this->lane, s_new, d_new, this->yaw, v_new, this->a, this->state));
 	return trajectory;
