@@ -142,14 +142,14 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
 
 
-	// Check if there is a vehicle in this lane within the minimum distance
+	// Check if there will be a vehicle in this lane within the minimum distance
 	for (map<int, vector<Vehicle>>::iterator it = predictions.begin(); it != predictions.end(); ++it) {
-		if (it->second[0].lane == this->lane && it->second[0].s < s_min) {
+		if (it->second[1].lane == this->lane && it->second[1].s < s_min && it->second[1].s > this->s) {
 			// Set speed to the ahead vehicle speed
 			//TODO add jerk limitation
-			v_new = min(this->target_speed, it->second[0].v);
+			v_new = min(this->target_speed, it->second[1].v);
 			// Set the new closest vehicle
-			s_min = it->second[0].s;
+			s_min = it->second[1].s;
 		}
 		// If there's no vehicle in front, accelerate to top speed
 		else {

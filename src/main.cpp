@@ -247,6 +247,8 @@ int main() {
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
 
+			vector<float> dah_x = previous_path_x;
+
           	// Previous path's end s and d values 
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
@@ -257,7 +259,7 @@ int main() {
 			// Vehicle data
 			vehicle.s = car_s;
 			vehicle.d = car_d;
-			vehicle.v = car_speed / 2.24;
+			vehicle.v = vehicle.target_speed;
 			vehicle.yaw = deg2rad(car_yaw);
 			vehicle.lane = int(floor((vehicle.d / vehicle.lane_width)));
 
@@ -296,8 +298,7 @@ int main() {
 			float next_v = best_trajectory[1].v;
 			float next_lane = best_trajectory[1].lane;
 			float delta_s = next_s - car_s;
-			cout << "ACTUAL s: " << car_s << "   d: " << car_d << "   lane: " << vehicle.lane << endl;
-			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   lane: " << next_lane << endl;
+			float delta_d = next_d - car_d;
 
 			//TODO: fix that best trajectory is always "KL"
 			//cout << best_trajectory[1].state << endl;
@@ -310,21 +311,47 @@ int main() {
 			double ref_y = car_y;
 			double ref_yaw = deg2rad(car_yaw);
 
-			// Use 2 points that make the path tangent to the car
-			double next_car_x = car_x + cos(car_yaw) * next_v * vehicle.dt;
-			double next_car_y = car_y + sin(car_yaw) * next_v * vehicle.dt;
+			int prev_size = previous_path_x.size();
 
-			ptsx.push_back(car_x);
-			ptsx.push_back(next_car_x);
-			ptsy.push_back(car_y);
-			ptsy.push_back(next_car_y);
+			cout << "ACTUAL s: " << car_s << "   d: " << car_d << "   lane: " << vehicle.lane << endl;
+			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   lane: " << next_lane << endl;
+
+
+			if (prev_size < 2) {
+
+				// Use 2 points that make the path tangent to the car
+				double prev_car_x = car_x - cos(ref_yaw);
+				double prev_car_y = car_y - sin(ref_yaw);
+
+				ptsx.push_back(prev_car_x);
+				ptsx.push_back(car_x);
+				ptsy.push_back(prev_car_y);
+				ptsy.push_back(car_y);
+
+			}
+			else {
+				ref_x = previous_path_x[1];
+				ref_y = previous_path_y[1];
+
+				double prev_ref_x = previous_path_x[0];
+				double prev_ref_y = previous_path_y[0];
+
+				cout << "PREV X -2: " << prev_ref_x << "   -1: " << ref_x << endl;
+				cout << "PREV Y -2: " << prev_ref_y << "   -1: " << ref_y << endl;
+
+				ref_yaw = atan2(ref_y - prev_ref_y, ref_x - prev_ref_x);
+
+				ptsx.push_back(prev_ref_x);
+				ptsx.push_back(ref_x);
+				ptsy.push_back(prev_ref_y);
+				ptsy.push_back(ref_y);
+			}
 
 
 
 			// In Frenet add evenly spaced points ahead of the starting reference
-			// TODO: somehow the next_s is behind the starting position
-			vector<double> next_wp0 = getXY(car_s + delta_s/3.0, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(car_s + delta_s /2.0, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp0 = getXY(car_s + delta_s / 3.0, car_d + delta_d / 3.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(car_s + delta_s / 2.0, car_d + delta_d / 2.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 			vector<double> next_wp2 = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
 
@@ -338,8 +365,8 @@ int main() {
 			
 			for (int i = 0; i < ptsx.size(); ++i) {
 				// Shift car reference point to 0
-				double shift_x = ptsx[i] - ref_x;
-				double shift_y = ptsy[i] - ref_y;
+				double shift_x = ptsx[i] - car_x;
+				double shift_y = ptsy[i] - car_y;
 
 				// Shift car reference angle to 0
 				ptsx[i] = (shift_x*cos(-ref_yaw) - shift_y * sin(-ref_yaw));
@@ -348,18 +375,23 @@ int main() {
 
 			// Create a spline
 			tk::spline s;
-			
+			// TODO: vehicle keeps drifting to the right
 			// Set (x,y) points to the spline
 			s.set_points(ptsx, ptsy);
 
 			// Define the actual (x,y) points we will use for the planner
 			vector<double> next_x_vals, next_y_vals;
 
+			
+/*
+
 			// Start with all the previous points from  the last time
-			for (int i = 0; i < previous_path_x.size(); ++i) {
+			for (int i = 0; i < prev_size; ++i) {
 				next_x_vals.push_back(previous_path_x[i]);
 				next_y_vals.push_back(previous_path_y[i]);
 			}
+*/
+			
 
 			// Calculate how to break up spline points so that we travel at our desired reference velocity
 			double target_x = delta_s;
@@ -368,6 +400,7 @@ int main() {
 			double x_add_on = 0;
 
 			// Fill up the rest of our path planner after filling it with previous points
+//			for (int i = 1; i <= 50 - prev_size; ++i) {
 			for (int i = 1; i <= 50; ++i) {
 				double N = target_dist / (vehicle.dt*next_v);
 				double x_point = x_add_on + target_x / N;
