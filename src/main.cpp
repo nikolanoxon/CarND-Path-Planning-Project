@@ -296,7 +296,6 @@ int main() {
           	double car_y = j[1]["y"];
           	double car_s = j[1]["s"];
           	double car_d = j[1]["d"];
-			double car_a = j[1]["a"];
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"] / 2.24;
 
@@ -319,7 +318,7 @@ int main() {
 			vehicle.yaw = deg2rad(car_yaw);
 			vehicle.lane = int(floor((vehicle.d / vehicle.lane_width)));
 
-
+			/*
 			// A map of predictions for non-ego vehicles
 			map<int, vector<Vehicle>> predictions;
 
@@ -357,7 +356,7 @@ int main() {
 			float delta_d = next_d - car_d;
 
 			//cout << best_trajectory[1].state << endl;
-
+			*/
 			// Create a list of widely spaced (x,y) waypoints
 			vector<double> ptsx, ptsy;
 			
@@ -369,8 +368,9 @@ int main() {
 			int prev_size = previous_path_x.size();
 
 			cout << "ACTUAL s: " << vehicle.s << "   d: " << vehicle.d << "   v: " << vehicle.v << "   a: " << vehicle.a << "   lane: " << vehicle.lane << endl;
-			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   lane: " << next_lane << endl;
-			cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
+//			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   lane: " << next_lane << endl;
+//			cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
+			cout << "previous size: " << prev_size << endl;
 
 			if (prev_size < 2) {
 
@@ -391,8 +391,8 @@ int main() {
 				double prev_ref_x = previous_path_x[prev_size - 2];
 				double prev_ref_y = previous_path_y[prev_size - 2];
 
-//				cout << "PREV X -2: " << prev_ref_x << "   -1: " << ref_x << endl;
-//				cout << "PREV Y -2: " << prev_ref_y << "   -1: " << ref_y << endl;
+				cout << "PREV X -2: " << prev_ref_x << "   -1: " << ref_x << endl;
+				cout << "PREV Y -2: " << prev_ref_y << "   -1: " << ref_y << endl;
 
 				ref_yaw = atan2(ref_y - prev_ref_y, ref_x - prev_ref_x);
 
@@ -452,7 +452,7 @@ int main() {
 
 
 			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = 90;
+			double target_x = 10;
 			double target_y = s(target_x);
 			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
 			double x_add_on = 0;
@@ -466,9 +466,9 @@ int main() {
 			}
 */
 
-			vector<double> start = { 0, vehicle.v, vehicle.a };
-			vector<double> end = { target_x, 10.0, 0.0 };
-			double T = 5.0;
+			vector<double> start = { 0.0, vehicle.v, 0.0 };
+			vector<double> end = { target_x, 1.0, 0.0 };
+			double T = 1.0;
 			vector<double> A = JMT(start, end, T);
 			
 			// s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
