@@ -11,9 +11,10 @@
 #include "Eigen-3.3/Eigen/Dense"
 #include "json.hpp"
 #include "spline.h"
+#include "constants.h"
 #include "Cost.h"
 #include "Vehicle.h"
-
+#include "jmt.h"
 
 using namespace std;
 using Eigen::MatrixXd;
@@ -46,10 +47,12 @@ double distance(double x1, double y1, double x2, double y2)
 {
 	return sqrt((x2 - x1)*(x2 - x1) + (y2 - y1)*(y2 - y1));
 }
+
 double mag(double X, double Y)
 {
 	return sqrt(pow(X,2) + pow(Y,2));
 }
+
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y)
 {
 
@@ -175,57 +178,6 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
-vector<double> JMT(vector< double> start, vector <double> end, double T)
-{
-	/*
-	Calculate the Jerk Minimizing Trajectory that connects the initial state
-	to the final state in time T.
-
-	INPUTS
-
-	start - the vehicles start location given as a length three array
-		corresponding to initial values of [s, s_dot, s_double_dot]
-
-	end   - the desired end state for vehicle. Like "start" this is a
-		length three array.
-
-	T     - The duration, in seconds, over which this maneuver should occur.
-
-	OUTPUT
-	an array of length 6, each value corresponding to a coefficent in the polynomial
-	s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
-
-	EXAMPLE
-
-	> JMT( [0, 10, 0], [10, 10, 0], 1)
-	[0.0, 10.0, 0.0, 0.0, 0.0, 0.0]
-	*/
-
-	MatrixXd A = MatrixXd(3, 3);
-	A << T * T*T, T*T*T*T, T*T*T*T*T,
-		3 * T*T, 4 * T*T*T, 5 * T*T*T*T,
-		6 * T, 12 * T*T, 20 * T*T*T;
-
-	MatrixXd B = MatrixXd(3, 1);
-	B << end[0] - (start[0] + start[1] * T + .5*start[2] * T*T),
-		end[1] - (start[1] + start[2] * T),
-		end[2] - start[2];
-
-	MatrixXd Ai = A.inverse();
-
-	MatrixXd C = Ai * B;
-
-	vector <double> result = { start[0], start[1], .5*start[2] };
-	for (int i = 0; i < C.size(); i++)
-	{
-		result.push_back(C.data()[i]);
-	}
-
-	return result;
-
-}
-
-
 int main() {
   uWS::Hub h;
 
@@ -235,7 +187,7 @@ int main() {
   vector<double> map_waypoints_s;
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
-
+  
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
@@ -248,9 +200,9 @@ int main() {
   	istringstream iss(line);
   	double x;
   	double y;
-  	float s;
-  	float d_x;
-  	float d_y;
+  	double s;
+  	double d_x;
+  	double d_y;
   	iss >> x;
   	iss >> y;
   	iss >> s;
@@ -264,7 +216,7 @@ int main() {
   }
 
   Vehicle vehicle = Vehicle();
-  vehicle.lane = 1;
+  vehicle.lane = MID_LANE;
 
 // Needed for backwards compatibility with older uWebSockets version
 #ifdef UWS_VCPKG
@@ -302,6 +254,7 @@ int main() {
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
+			int prev_size = previous_path_x.size();
 
           	// Previous path's end s and d values 
           	double end_path_s = j[1]["end_path_s"];
@@ -310,33 +263,24 @@ int main() {
 			// Sensor Fusion Data, a list of all other cars on the same side of the road.
 			auto sensor_fusion = j[1]["sensor_fusion"];
 
-			// Vehicle data
-			vehicle.s = car_s;
-			vehicle.d = car_d;
-			vehicle.a = (car_speed - vehicle.v);
-			vehicle.v = car_speed;
-			vehicle.yaw = deg2rad(car_yaw);
-			vehicle.lane = int(floor((vehicle.d / vehicle.lane_width)));
-
-			/*
 			// A map of predictions for non-ego vehicles
 			map<int, vector<Vehicle>> predictions;
 
 			for (int i = 0; i < sensor_fusion.size(); i++) {
 
 				int id = sensor_fusion[i][0];
-				float x = sensor_fusion[i][1];
-				float y = sensor_fusion[i][2];
-				float vx = sensor_fusion[i][3];
-				float vy = sensor_fusion[i][4];
-				float s = sensor_fusion[i][5];
-				float d = sensor_fusion[i][6];
+				double x = sensor_fusion[i][1];
+				double y = sensor_fusion[i][2];
+				double vx = sensor_fusion[i][3];
+				double vy = sensor_fusion[i][4];
+				double s = sensor_fusion[i][5];
+				double d = sensor_fusion[i][6];
 
 				Vehicle road_vehicle;
 				road_vehicle.v = mag(vx, vy);
 				road_vehicle.s = s;
 				road_vehicle.d = d;
-				road_vehicle.lane = int(floor((d / vehicle.lane_width)));
+				road_vehicle.lane = int(floor((d / LANE_WIDTH)));
 				road_vehicle.a = 0; // Assume no acceleration
 
 				//A vector of predictions for a non-ego vehicle
@@ -344,70 +288,115 @@ int main() {
 
 				predictions.insert(pair<int, vector<Vehicle>>(id, prediction));
 			} 
-
-			// The vehicle trajectory in 5 seconds
-			vector<Vehicle> best_trajectory = vehicle.choose_next_state(predictions);
-
-			float next_s = best_trajectory[1].s;
-			float next_d = best_trajectory[1].d;
-			float next_v = best_trajectory[1].v;
-			float next_lane = best_trajectory[1].lane;
-			float delta_s = next_s - car_s;
-			float delta_d = next_d - car_d;
-
-			//cout << best_trajectory[1].state << endl;
-			*/
-			// Create a list of widely spaced (x,y) waypoints
-			vector<double> ptsx, ptsy;
 			
-			// Reference (x,y) yaw states
-			double ref_x = car_x;
-			double ref_y = car_y;
+			// Reference states
 			double ref_yaw = deg2rad(car_yaw);
 
-			int prev_size = previous_path_x.size();
+			double ref_x1, ref_x2, ref_x3;
+			double ref_y1, ref_y2, ref_y3;
+			double ref_v1;
+			double ref_s, ref_d;
+			double ref_v2 = 0;
+			double ref_a1 = 0;
 
-			cout << "ACTUAL s: " << vehicle.s << "   d: " << vehicle.d << "   v: " << vehicle.v << "   a: " << vehicle.a << "   lane: " << vehicle.lane << endl;
-//			cout << "GOAL   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   lane: " << next_lane << endl;
-//			cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
-			cout << "previous size: " << prev_size << endl;
+			// Create a list of widely spaced (x,y) waypoints
+			vector<double> ptsx, ptsy;
 
+			// Use the car's position and yaw rate to create anchor points
 			if (prev_size < 2) {
+				ref_x1 = car_x;
+				ref_y1 = car_y;
 
-				// Use 2 points that make the path tangent to the car
-				double prev_car_x = car_x - cos(ref_yaw);
-				double prev_car_y = car_y - sin(ref_yaw);
+				ref_x2 = ref_x1 - cos(ref_yaw);
+				ref_y2 = ref_y1 - sin(ref_yaw);
 
-				ptsx.push_back(prev_car_x);
-				ptsx.push_back(car_x);
-				ptsy.push_back(prev_car_y);
-				ptsy.push_back(car_y);
+				ref_v1 = car_speed;
 
+				ref_s = car_s;
+				ref_d = car_d;
+			}
+			// Use the last two points to create anchor points
+			else {
+				ref_x1 = previous_path_x[prev_size - 1];
+				ref_y1 = previous_path_y[prev_size - 1];
+
+				ref_x2 = previous_path_x[prev_size - 2];
+				ref_y2 = previous_path_y[prev_size - 2];
+
+				ref_v1 = (mag(ref_x1, ref_y1) - mag(ref_x2, ref_y2)) / DT;
+
+				ref_yaw = atan2(ref_y1 - ref_y2, ref_x1 - ref_x2);
+
+				ref_s = end_path_s;
+				ref_d = end_path_d;
+			}
+
+			double ref_lane = int(floor((ref_d / LANE_WIDTH)));
+
+			// Set the anchor points
+			ptsx.push_back(ref_x2);
+			ptsx.push_back(ref_x1);
+			ptsy.push_back(ref_y2);
+			ptsy.push_back(ref_y1);
+
+			// Find the acceleration at the end of the last trajectory
+			if (prev_size > 2) {
+				ref_x3 = previous_path_x[prev_size - 3];
+				ref_y3 = previous_path_y[prev_size - 3];
+
+				ref_v2 = (mag(ref_x2, ref_y2) - mag(ref_x3, ref_y3)) / DT;
+
+				ref_a1 = (ref_v1 - ref_v2) / DT;
+			}
+
+
+			// Vehicle data
+			vehicle.s = ref_s;
+			vehicle.d = ref_d;
+			vehicle.v = ref_v1;
+			vehicle.a = ref_a1;
+			vehicle.yaw = ref_yaw;
+			vehicle.lane = ref_lane;
+			vehicle.prev_size = prev_size;
+
+			//TODO: Fix the zig-zagging
+			// The vehicle trajectory in 1 second
+			vector<Vehicle> best_trajectory = vehicle.choose_next_state(predictions);
+
+			double next_s = best_trajectory.back().s;
+			double next_d = best_trajectory.back().d;
+			double next_v = best_trajectory.back().v;
+			double next_a = best_trajectory.back().a;
+			double next_lane = best_trajectory.back().lane;
+			double delta_s = next_s - car_s;
+			double delta_d = next_d - car_d;
+
+			// Update State
+			if (next_lane > ref_lane) {
+				vehicle.state = "LCR";
+
+			}
+			else if (next_lane < ref_lane) {
+				vehicle.state = "LCL";
 			}
 			else {
-				ref_x = previous_path_x[prev_size - 1];
-				ref_y = previous_path_y[prev_size - 1];
-
-				double prev_ref_x = previous_path_x[prev_size - 2];
-				double prev_ref_y = previous_path_y[prev_size - 2];
-
-				cout << "PREV X -2: " << prev_ref_x << "   -1: " << ref_x << endl;
-				cout << "PREV Y -2: " << prev_ref_y << "   -1: " << ref_y << endl;
-
-				ref_yaw = atan2(ref_y - prev_ref_y, ref_x - prev_ref_x);
-
-				ptsx.push_back(prev_ref_x);
-				ptsx.push_back(ref_x);
-				ptsy.push_back(prev_ref_y);
-				ptsy.push_back(ref_y);
+				vehicle.state = "KL";
 			}
 
 
+			cout << vehicle.state << endl;
+
+			cout << "CURRENT s: " << car_s << "   d: " << car_d << "   v: " << car_speed << "   lane: " << vehicle.lane << endl;
+			cout << "NEXT   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   a: " << next_a << "   lane: " << next_lane << endl;
+			cout << "REF1   s: " << ref_s << "   x1: " << ref_x1 << "   y1: " << ref_y1 << "   v1: " << ref_v1 << "   a1: " << ref_a1 << endl;
+			cout << "REF2   s: " << ref_s << "   x2: " << ref_x2 << "   y2: " << ref_y2 << "   v2: " << ref_v2 << endl;
+			cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
+			cout << "previous size: " << prev_size << endl;
 
 			// In Frenet add evenly spaced points ahead of the starting reference
-			vector<double> next_wp0 = getXY(car_s + 30, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(car_s + 60, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp2 = getXY(car_s + 90, 6, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp0 = getXY(car_s + 30, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(car_s + 60, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp2 = getXY(car_s + 90, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 			/*
 			vector<double> next_wp0 = getXY(car_s + delta_s / 3.0, car_d + delta_d / 3.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 			vector<double> next_wp1 = getXY(car_s + delta_s / 2.0, car_d + delta_d / 2.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
@@ -424,8 +413,8 @@ int main() {
 			
 			for (int i = 0; i < ptsx.size(); ++i) {
 				// Shift car reference point to 0
-				double shift_x = ptsx[i] - ref_x;
-				double shift_y = ptsy[i] - ref_y;
+				double shift_x = ptsx[i] - ref_x1;
+				double shift_y = ptsy[i] - ref_y1;
 
 				// Shift car reference angle to 0
 				ptsx[i] = (shift_x*cos(-ref_yaw) - shift_y * sin(-ref_yaw));
@@ -434,58 +423,33 @@ int main() {
 
 			// Create a spline
 			tk::spline s;
-			// TODO: vehicle keeps drifting to the right
+
 			// Set (x,y) points to the spline
+			cout << "PTSX: " << ptsx[0] << "; " << ptsx[1] << "; " << ptsx[2] << "; " << ptsx[3] << "; " << ptsx[4] << endl;
 			s.set_points(ptsx, ptsy);
 
 			// Define the actual (x,y) points we will use for the planner
 			vector<double> next_x_vals, next_y_vals, next_v_vals, next_a_vals;
 
-
-/*
 			// Start with all the previous points from  the last time
 			for (int i = 0; i < prev_size; ++i) {
 				next_x_vals.push_back(previous_path_x[i]);
 				next_y_vals.push_back(previous_path_y[i]);
 			}
-*/
-
-
-			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = 10;
-			double target_y = s(target_x);
-			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
-			double x_add_on = 0;
 
 			// Calculate the JMT to smoothly move to the next point
+			vector<double> start = { 0, ref_v1, ref_a1 };
+			vector<double> end = { next_s - ref_s, next_v, next_a };
+			double t = DT * (N_CYCLES -	prev_size);
+			vector<double> a_vals = JMT(start, end, t);
 
-/*
-			// Adjust the starting point
-			if (prev_size > 0) {
-				start_x = next_x_vals[prev_size - 1] - ref_x;
-			}
-*/
-
-			vector<double> start = { 0.0, vehicle.v, 0.0 };
-			vector<double> end = { target_x, 1.0, 0.0 };
-			double T = 1.0;
-			vector<double> A = JMT(start, end, T);
-			
-			// s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
-
-			// Plan a trajectory 1 second ahead
-			// TODO: fix this JMT outlook
-//			for (int i = 1; i <= 50 - prev_size; ++i) {
-			for (int i = 1; i <= 50; ++i) {
-//				double x_point = 0;
-//				for (int j = 0; j < A.size(); j++) {
-//					x_point += A[j] * pow(dt * i, j);
-//				}
-				double t = i * vehicle.dt;
-				double x_point = A[0] + A[1] * t + A[2] * pow(t,2) + A[3] * pow(t, 3) + A[4] * pow(t, 4) + A[5] * pow(t, 5);
+			// Append the JMT to the end of the current trajectory
+			for (int i = 1; i <= (N_CYCLES - prev_size); ++i) {
+				double t = i * DT;
+				double x_point = a_vals[0] + a_vals[1] * t + a_vals[2] * pow(t,2) + a_vals[3] * pow(t, 3) + a_vals[4] * pow(t, 4) + a_vals[5] * pow(t, 5);
 				double y_point = s(x_point);
-				double v_point = A[1] + A[2] * t + A[3] * pow(t, 2) + A[4] * pow(t, 3) + A[5] * pow(t, 4);
-				double a_point = A[2] + A[3] * t + A[4] * pow(t, 2) + A[5] * pow(t, 3);
+				double v_point = a_vals[1] + 2 * a_vals[2] * t + 3 * a_vals[3] * pow(t, 2) + 4 * a_vals[4] * pow(t, 3) + 5 * a_vals[5] * pow(t, 4);
+				double a_point = 2 * a_vals[2] + 6 * a_vals[3] * t + 12 * a_vals[4] * pow(t, 2) + 20 * a_vals[5] * pow(t, 3);
 
 				double x_ref = x_point;
 				double y_ref = y_point;
@@ -494,21 +458,32 @@ int main() {
 				x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
 				y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
 
-				x_point += ref_x;
-				y_point += ref_y;
+				x_point += ref_x1;
+				y_point += ref_y1;
 
 				next_x_vals.push_back(x_point);
 				next_y_vals.push_back(y_point);
 				next_v_vals.push_back(v_point);
 				next_a_vals.push_back(a_point);
-
 			}
 
 
 /*
+			// Calculate how to break up spline points so that we travel at our desired reference velocity
+			double target_x = 10;
+			double target_y = s(target_x);
+			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
+			double x_add_on = 0;
+
 			// Fill up the rest of our path planner after filling it with previous points
+			vector<double> start = { vehicle.s, vehicle.v, vehicle.a };
+			vector<double> end = { next_s, next_v, next_a };
+			double T = HORIZON;
+			vector<double> a_vals = JMT(start, end, T);
+			double target_v = a_vals[1] + 2 * a_vals[2] * DT + 3 * a_vals[3] * pow(DT, 2) + 4 * a_vals[4] * pow(DT, 3) + 5 * a_vals[5] * pow(DT, 4);
+
 			for (int i = 1; i <= 50 - prev_size; ++i) {
-				double N = target_dist / (vehicle.dt*next_v);
+				double N = target_dist / (DT*target_v);
 				double x_point = x_add_on + target_x / N;
 				double y_point = s(x_point);
 

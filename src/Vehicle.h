@@ -5,51 +5,43 @@
 #include <vector>
 #include <map>
 #include <string>
+#include "constants.h"
 
 using namespace std;
 
 class Vehicle {
 public:
 
-	map<string, int> lane_direction = { {"PLCL", 1}, {"LCL", 1}, {"LCR", -1}, {"PLCR", -1} };
+	map<string, int> lane_direction = { {"PLCL", -1}, {"LCL", -1}, {"LCR", 1}, {"PLCR", 1} };
 
-	float lane_width = 4;
-
-	float dt = 0.02; // cycle time (sec)
-
-	int preferred_buffer = 6; // meters
+	vector<int> lane_position = { LEFT_LANE_CENTER, MID_LANE_CENTER, RIGHT_LANE_CENTER };
 
 	int lane;
 
-	float s;
+	double s;
 
-	float d;
+	double d;
 
-	float yaw;
+	double yaw;
 
-	float v;
+	double v;
 
-	float a;
+	double a;
 
-	float j;
+	double j;
 
-	int lanes_available = 3;
+	int prev_size;
 
-	float v_max = 50.0 / 2.24;
-
-	float a_max = 10; //	m/s^2
-
-	float j_max = 10; //	m/s^3;
-
-	float target_speed = v_max; //	m/s
+	double target_speed = V_MAX; //	m/s
 
 	string state = "KL";
+
 
 	/**
 	* Constructor
 	*/
 	Vehicle();
-	Vehicle(int lane, float s, float d, float theta, float v, float a, string state);
+	Vehicle(int lane, double s, double d, double theta, double v, double a, string state);
 
 	/**
 	* Destructor
@@ -68,13 +60,15 @@ public:
 
 	vector<Vehicle> prep_lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions);
 
-	Vehicle increment(float dt);
+	Vehicle increment(double dt);
+
+	vector<double> gaussian_move(void);
 
 	bool get_vehicle_behind(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle);
 
 	bool get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle);
 
-	vector<Vehicle> generate_predictions(int horizon = 2);
+	vector<Vehicle> generate_predictions(int horizon = 1);
 
 	void realize_next_state(vector<Vehicle> trajectory);
 

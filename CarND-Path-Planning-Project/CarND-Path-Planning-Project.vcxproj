@@ -121,12 +121,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\constants.h" />
     <ClInclude Include="..\src\Cost.h" />
+    <ClInclude Include="..\src\jmt.h" />
     <ClInclude Include="..\src\json.hpp" />
     <ClInclude Include="..\src\Vehicle.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\Cost.cpp" />
+    <ClCompile Include="..\src\jmt.cpp" />
     <ClCompile Include="..\src\main.cpp" />
     <ClCompile Include="..\src\Vehicle.cpp" />
   </ItemGroup>
