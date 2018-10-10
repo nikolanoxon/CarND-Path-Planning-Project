@@ -163,6 +163,7 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 
 	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
 	
+	// Perform a gaussian move to get a random future state
 	vector<double> kinematics = gaussian_move();
 
 	double a_new = kinematics[0];
@@ -178,19 +179,20 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions) {
 	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
 
+	// Perform a gaussian move to get a random future state
 	vector<double> kinematics = gaussian_move();
 
 	double a_new = kinematics[0];
 	double v_new = kinematics[1];
 	double s_new = kinematics[2];
 
-	double d_new = this->lane_position[this->lane];
+	// The new lane is one lane over from the current lane
+	int new_lane = this->lane + lane_direction[state];
 
-	int new_lane = this->lane + lane_direction[this->state];
+	// The new d value corresponds to the new lane
+	double d_new = this->lane_position[new_lane];
 
-	d_new = this->lane_position[new_lane];
-
-	trajectory.push_back(Vehicle(new_lane, s_new, d_new, this->yaw, v_new, a_new, this->state));
+	trajectory.push_back(Vehicle(new_lane, s_new, d_new, this->yaw, v_new, a_new, state));
 	return trajectory;
 }
 
@@ -232,7 +234,12 @@ Vehicle Vehicle::increment(double dt) {
 }
 
 vector<double> Vehicle::gaussian_move() {
-	
+	/*
+	INPUT: none
+	OUTPUT: velocity, distance, and acceleration values based on a gaussian change in velocity
+			It is assumed that the acceleration is constant over this interval, and that the 
+			distance change is based on an average of the old/new velocities and speeds
+	*/
 	
 	// New velocity is a distribution around the current velocity between 0 and V_MAX
 	normal_distribution<double> dist_v(this->v, SIGMA_V);
@@ -241,8 +248,8 @@ vector<double> Vehicle::gaussian_move() {
 
 	double t = DT * (N_CYCLES - this->prev_size);
 
+	//Scale the velocity between 0 and V_MAX
 	double v_new = min(V_MAX, max(dist_v(gen), 0.0));
-
 	double a_new = (v_new - this->v) / t;
 
 	double v_avg = 0.5 * (v_new + this->v);
@@ -250,25 +257,6 @@ vector<double> Vehicle::gaussian_move() {
 
 	double s_new = this->s + v_avg * t + 0.5 * a_avg * pow(t, 2);
 	
-	/*
-	normal_distribution<double> dist_a(0, SIGMA_A);
-	normal_distribution<double> dist_v(0, SIGMA_V);
-	normal_distribution<double> dist_s(0, SIGMA_S);
-
-	double dt = DT * (N_CYCLES - this->prev_size);
-
-	double a_new = this->a;
-	double v_new = this->v + this->a * dt;
-	double s_new = this->s + this->v * dt + 0.5 * this->a * pow(dt, 2);
-
-	double delta_a = dist_a(gen) * dt;
-	double delta_v = dist_v(gen) * dt;
-	double delta_s = dist_s(gen) * dt;
-
-	a_new += delta_a;
-	v_new += delta_v;
-	s_new += delta_s;
-	*/
 	return { a_new, v_new, s_new };
 }
 

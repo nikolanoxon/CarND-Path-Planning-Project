@@ -246,6 +246,9 @@ int main() {
         	// Main car's localization Data
           	double car_x = j[1]["x"];
           	double car_y = j[1]["y"];
+
+			//TODO: fix the assertion error when the track loops back to the start (s_new < s_old)
+
           	double car_s = j[1]["s"];
           	double car_d = j[1]["d"];
           	double car_yaw = j[1]["yaw"];
@@ -323,7 +326,7 @@ int main() {
 				ref_x2 = previous_path_x[prev_size - 2];
 				ref_y2 = previous_path_y[prev_size - 2];
 
-				ref_v1 = (mag(ref_x1, ref_y1) - mag(ref_x2, ref_y2)) / DT;
+				ref_v1 = mag(ref_x1 - ref_x2, ref_y1 - ref_y2) / DT;
 
 				ref_yaw = atan2(ref_y1 - ref_y2, ref_x1 - ref_x2);
 
@@ -344,89 +347,10 @@ int main() {
 				ref_x3 = previous_path_x[prev_size - 3];
 				ref_y3 = previous_path_y[prev_size - 3];
 
-				ref_v2 = (mag(ref_x2, ref_y2) - mag(ref_x3, ref_y3)) / DT;
+				ref_v2 = mag(ref_x2- ref_x3, ref_y2 - ref_y3) / DT;
 
 				ref_a1 = (ref_v1 - ref_v2) / DT;
 			}
-
-
-			// Vehicle data
-			vehicle.s = ref_s;
-			vehicle.d = ref_d;
-			vehicle.v = ref_v1;
-			vehicle.a = ref_a1;
-			vehicle.yaw = ref_yaw;
-			vehicle.lane = ref_lane;
-			vehicle.prev_size = prev_size;
-
-			//TODO: Fix the zig-zagging
-			// The vehicle trajectory in 1 second
-			vector<Vehicle> best_trajectory = vehicle.choose_next_state(predictions);
-
-			double next_s = best_trajectory.back().s;
-			double next_d = best_trajectory.back().d;
-			double next_v = best_trajectory.back().v;
-			double next_a = best_trajectory.back().a;
-			double next_lane = best_trajectory.back().lane;
-			double delta_s = next_s - car_s;
-			double delta_d = next_d - car_d;
-
-			// Update State
-			if (next_lane > ref_lane) {
-				vehicle.state = "LCR";
-
-			}
-			else if (next_lane < ref_lane) {
-				vehicle.state = "LCL";
-			}
-			else {
-				vehicle.state = "KL";
-			}
-
-
-			cout << vehicle.state << endl;
-
-			cout << "CURRENT s: " << car_s << "   d: " << car_d << "   v: " << car_speed << "   lane: " << vehicle.lane << endl;
-			cout << "NEXT   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   a: " << next_a << "   lane: " << next_lane << endl;
-			cout << "REF1   s: " << ref_s << "   x1: " << ref_x1 << "   y1: " << ref_y1 << "   v1: " << ref_v1 << "   a1: " << ref_a1 << endl;
-			cout << "REF2   s: " << ref_s << "   x2: " << ref_x2 << "   y2: " << ref_y2 << "   v2: " << ref_v2 << endl;
-			cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
-			cout << "previous size: " << prev_size << endl;
-
-			// In Frenet add evenly spaced points ahead of the starting reference
-			vector<double> next_wp0 = getXY(car_s + 30, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(car_s + 60, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp2 = getXY(car_s + 90, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			/*
-			vector<double> next_wp0 = getXY(car_s + delta_s / 3.0, car_d + delta_d / 3.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp1 = getXY(car_s + delta_s / 2.0, car_d + delta_d / 2.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			vector<double> next_wp2 = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-			*/
-
-			ptsx.push_back(next_wp0[0]);
-			ptsx.push_back(next_wp1[0]);
-			ptsx.push_back(next_wp2[0]);
-
-			ptsy.push_back(next_wp0[1]);
-			ptsy.push_back(next_wp1[1]);
-			ptsy.push_back(next_wp2[1]);
-			
-			for (int i = 0; i < ptsx.size(); ++i) {
-				// Shift car reference point to 0
-				double shift_x = ptsx[i] - ref_x1;
-				double shift_y = ptsy[i] - ref_y1;
-
-				// Shift car reference angle to 0
-				ptsx[i] = (shift_x*cos(-ref_yaw) - shift_y * sin(-ref_yaw));
-				ptsy[i] = (shift_x*sin(-ref_yaw) + shift_y * cos(-ref_yaw));
-			}
-
-			// Create a spline
-			tk::spline s;
-
-			// Set (x,y) points to the spline
-			cout << "PTSX: " << ptsx[0] << "; " << ptsx[1] << "; " << ptsx[2] << "; " << ptsx[3] << "; " << ptsx[4] << endl;
-			s.set_points(ptsx, ptsy);
 
 			// Define the actual (x,y) points we will use for the planner
 			vector<double> next_x_vals, next_y_vals, next_v_vals, next_a_vals;
@@ -437,80 +361,121 @@ int main() {
 				next_y_vals.push_back(previous_path_y[i]);
 			}
 
-			// Calculate the JMT to smoothly move to the next point
-			vector<double> start = { 0, ref_v1, ref_a1 };
-			vector<double> end = { next_s - ref_s, next_v, next_a };
-			double t = DT * (N_CYCLES -	prev_size);
-			vector<double> a_vals = JMT(start, end, t);
+			// Run trajectory planner on a fixed update rate
+			if ((N_CYCLES - prev_size) * DT > UPDATE_RATE) {
+				// Vehicle data
+				vehicle.s = ref_s;
+				vehicle.d = ref_d;
+				vehicle.v = ref_v1;
+				vehicle.a = ref_a1;
+				vehicle.yaw = ref_yaw;
+				vehicle.lane = ref_lane;
+				vehicle.prev_size = prev_size;
 
-			// Append the JMT to the end of the current trajectory
-			for (int i = 1; i <= (N_CYCLES - prev_size); ++i) {
-				double t = i * DT;
-				double x_point = a_vals[0] + a_vals[1] * t + a_vals[2] * pow(t,2) + a_vals[3] * pow(t, 3) + a_vals[4] * pow(t, 4) + a_vals[5] * pow(t, 5);
-				double y_point = s(x_point);
-				double v_point = a_vals[1] + 2 * a_vals[2] * t + 3 * a_vals[3] * pow(t, 2) + 4 * a_vals[4] * pow(t, 3) + 5 * a_vals[5] * pow(t, 4);
-				double a_point = 2 * a_vals[2] + 6 * a_vals[3] * t + 12 * a_vals[4] * pow(t, 2) + 20 * a_vals[5] * pow(t, 3);
+				// The vehicle trajectory in 1 second
+				vector<Vehicle> best_trajectory = vehicle.choose_next_state(predictions);
 
-				double x_ref = x_point;
-				double y_ref = y_point;
+				double next_s = best_trajectory.back().s;
+				double next_d = best_trajectory.back().d;
+				double next_v = best_trajectory.back().v;
+				double next_a = best_trajectory.back().a;
+				double next_lane = best_trajectory.back().lane;
+				double delta_s = next_s - car_s;
+				double delta_d = next_d - car_d;
 
-				// Un-shift back to normal
-				x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
-				y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
+				// Update State
+				if (next_lane > ref_lane) {
+					vehicle.state = "LCR";
 
-				x_point += ref_x1;
-				y_point += ref_y1;
+				}
+				else if (next_lane < ref_lane) {
+					vehicle.state = "LCL";
+				}
+				else {
+					vehicle.state = "KL";
+				}
 
-				next_x_vals.push_back(x_point);
-				next_y_vals.push_back(y_point);
-				next_v_vals.push_back(v_point);
-				next_a_vals.push_back(a_point);
+
+				cout << vehicle.state << endl;
+
+				cout << "CURRENT s: " << car_s << "   d: " << car_d << "   v: " << car_speed << "   lane: " << vehicle.lane << endl;
+				cout << "NEXT   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   a: " << next_a << "   lane: " << next_lane << endl;
+				cout << "REF1   s: " << ref_s << "   x1: " << ref_x1 << "   y1: " << ref_y1 << "   v1: " << ref_v1 << "   a1: " << ref_a1 << endl;
+				cout << "REF2   s: " << ref_s << "   x2: " << ref_x2 << "   y2: " << ref_y2 << "   v2: " << ref_v2 << endl;
+				cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
+				cout << "previous size: " << prev_size << endl;
+
+				// In Frenet add evenly spaced points ahead of the starting reference
+				vector<double> next_wp0 = getXY(car_s + 30, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+				vector<double> next_wp1 = getXY(car_s + 60, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+				vector<double> next_wp2 = getXY(car_s + 90, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+				/*
+				vector<double> next_wp0 = getXY(car_s + delta_s / 3.0, car_d + delta_d / 3.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+				vector<double> next_wp1 = getXY(car_s + delta_s / 2.0, car_d + delta_d / 2.0, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+				vector<double> next_wp2 = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+				*/
+
+				ptsx.push_back(next_wp0[0]);
+				ptsx.push_back(next_wp1[0]);
+				ptsx.push_back(next_wp2[0]);
+
+				ptsy.push_back(next_wp0[1]);
+				ptsy.push_back(next_wp1[1]);
+				ptsy.push_back(next_wp2[1]);
+
+				for (int i = 0; i < ptsx.size(); ++i) {
+					// Shift car reference point to 0
+					double shift_x = ptsx[i] - ref_x1;
+					double shift_y = ptsy[i] - ref_y1;
+
+					// Shift car reference angle to 0
+					ptsx[i] = (shift_x*cos(-ref_yaw) - shift_y * sin(-ref_yaw));
+					ptsy[i] = (shift_x*sin(-ref_yaw) + shift_y * cos(-ref_yaw));
+				}
+
+				// Create a spline
+				tk::spline s;
+
+				// Set (x,y) points to the spline
+				cout << "PTSX: " << ptsx[0] << "; " << ptsx[1] << "; " << ptsx[2] << "; " << ptsx[3] << "; " << ptsx[4] << endl;
+				s.set_points(ptsx, ptsy);
+
+				// Calculate the JMT to smoothly move to the next point
+				vector<double> start = { 0, ref_v1, ref_a1 };
+				vector<double> end = { next_s - ref_s, next_v, next_a };
+				double t = DT * (N_CYCLES - prev_size);
+				vector<double> a_vals = JMT(start, end, t);
+
+				// Append the JMT to the end of the current trajectory
+				for (int i = 1; i <= (N_CYCLES - prev_size); ++i) {
+					double t = i * DT;
+					double x_point = a_vals[0] + a_vals[1] * t + a_vals[2] * pow(t, 2) + a_vals[3] * pow(t, 3) + a_vals[4] * pow(t, 4) + a_vals[5] * pow(t, 5);
+					double y_point = s(x_point);
+					double v_point = a_vals[1] + 2 * a_vals[2] * t + 3 * a_vals[3] * pow(t, 2) + 4 * a_vals[4] * pow(t, 3) + 5 * a_vals[5] * pow(t, 4);
+					double a_point = 2 * a_vals[2] + 6 * a_vals[3] * t + 12 * a_vals[4] * pow(t, 2) + 20 * a_vals[5] * pow(t, 3);
+
+					double x_ref = x_point;
+					double y_ref = y_point;
+
+					// Un-shift back to normal
+					x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
+					y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
+
+					x_point += ref_x1;
+					y_point += ref_y1;
+
+					next_x_vals.push_back(x_point);
+					next_y_vals.push_back(y_point);
+					next_v_vals.push_back(v_point);
+					next_a_vals.push_back(a_point);
+				}
+
 			}
-
-
-/*
-			// Calculate how to break up spline points so that we travel at our desired reference velocity
-			double target_x = 10;
-			double target_y = s(target_x);
-			double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
-			double x_add_on = 0;
-
-			// Fill up the rest of our path planner after filling it with previous points
-			vector<double> start = { vehicle.s, vehicle.v, vehicle.a };
-			vector<double> end = { next_s, next_v, next_a };
-			double T = HORIZON;
-			vector<double> a_vals = JMT(start, end, T);
-			double target_v = a_vals[1] + 2 * a_vals[2] * DT + 3 * a_vals[3] * pow(DT, 2) + 4 * a_vals[4] * pow(DT, 3) + 5 * a_vals[5] * pow(DT, 4);
-
-			for (int i = 1; i <= 50 - prev_size; ++i) {
-				double N = target_dist / (DT*target_v);
-				double x_point = x_add_on + target_x / N;
-				double y_point = s(x_point);
-
-				x_add_on = x_point;
-
-				double x_ref = x_point;
-				double y_ref = y_point;
-
-				// Un-shift back to normal
-				x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
-				y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
-
-				x_point += ref_x;
-				y_point += ref_y;
-
-				next_x_vals.push_back(x_point);
-				next_y_vals.push_back(y_point);
-			}
-*/
-
-
-          	json msgJson;
-			// TODO: vehicle does not follow spline
+			json msgJson;
 			msgJson["next_x"] = next_x_vals;
 			msgJson["next_y"] = next_y_vals;
-			
-          	auto msg = "42[\"control\","+ msgJson.dump()+"]";
+
+			auto msg = "42[\"control\"," + msgJson.dump() + "]";
 
 // Needed for backwards compatibility with older uWebSockets version
 #ifdef UWS_VCPKG
