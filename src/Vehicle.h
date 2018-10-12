@@ -12,9 +12,11 @@ using namespace std;
 class Vehicle {
 public:
 
-	map<string, int> lane_direction = { {"PLCL", -1}, {"LCL", -1}, {"LCR", 1}, {"PLCR", 1} };
+	map<string, int> lane_direction = { {"PLCL", -1}, {"LCL", -1}, {"LCR", 1}, 
+	{"PLCR", 1} };
 
-	vector<int> lane_position = { LEFT_LANE_CENTER, MID_LANE_CENTER, RIGHT_LANE_CENTER };
+	vector<int> lane_position = { LEFT_LANE_CENTER, MID_LANE_CENTER, 
+		RIGHT_LANE_CENTER };
 
 	int lane;
 
@@ -41,7 +43,8 @@ public:
 	* Constructor
 	*/
 	Vehicle();
-	Vehicle(int lane, double s, double d, double theta, double v, double a, string state);
+	Vehicle(int lane, double s, double d, double theta, double v, double a, 
+		string state);
 
 	/**
 	* Destructor
@@ -52,28 +55,19 @@ public:
 
 	vector<string> successor_states();
 
-	vector<Vehicle> generate_trajectory(string state, map<int, vector<Vehicle>> predictions);
+	vector<Vehicle> generate_trajectory(string state, map<int, 
+		vector<Vehicle>> predictions);
 
 	vector<Vehicle> keep_lane_trajectory(map<int, vector<Vehicle>> predictions);
 
-	vector<Vehicle> lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions);
-
-	vector<Vehicle> prep_lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions);
+	vector<Vehicle> lane_change_trajectory(string state, map<int, 
+		vector<Vehicle>> predictions);
 
 	Vehicle increment(double dt);
 
 	vector<double> gaussian_move(void);
 
-	bool get_vehicle_behind(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle);
-
-	bool get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle);
-
 	vector<Vehicle> generate_predictions(int horizon = 1);
-
-	void realize_next_state(vector<Vehicle> trajectory);
-
-	void configure(vector<int> road_data);
-
 };
 
-#endif
+#endif /* VEHICLE */

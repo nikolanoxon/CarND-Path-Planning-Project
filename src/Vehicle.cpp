@@ -16,7 +16,8 @@ using namespace std;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
-default_random_engine gen;
+random_device rd;
+default_random_engine gen(rd());
 
 /**
  * Initializes Vehicle
@@ -24,7 +25,8 @@ default_random_engine gen;
 
 Vehicle::Vehicle() {}
 
-Vehicle::Vehicle(int lane, double s, double d, double yaw, double v, double a, string state) {
+Vehicle::Vehicle(int lane, double s, double d, double yaw, double v, double a, 
+	string state) {
 /*
 A vehicle object with lane and kinematic data
 */
@@ -40,20 +42,17 @@ A vehicle object with lane and kinematic data
 Vehicle::~Vehicle() {}
 
 
-vector<Vehicle> Vehicle::choose_next_state(map<int, vector<Vehicle>> predictions) {
+vector<Vehicle> Vehicle::choose_next_state(map<int, 
+	vector<Vehicle>> predictions) {
 	/*
 	INPUT: A predictions map. This is a map of vehicle id keys with predicted
-		vehicle trajectories as values. Trajectories are a vector of Vehicle objects representing
+		vehicle trajectories as values. Trajectories are a vector of Vehicle 
+		objects representing
 		the vehicle at the current timestep and one timestep in the future.
-	OUTPUT: The the best (lowest cost) trajectory corresponding to the next ego vehicle state.
+	OUTPUT: The the best (lowest cost) trajectory corresponding to the next ego 
+	vehicle state.
 	*/
 	vector<string> states = successor_states();
-
-	/*
-	for (int i = 0; i < states.size(); ++i) {
-		cout << states[i] << endl;
-	}
-	*/
 	double cost;
 	vector<double> costs;
 	vector<string> final_states;
@@ -65,21 +64,29 @@ vector<Vehicle> Vehicle::choose_next_state(map<int, vector<Vehicle>> predictions
 		for (int i = 0; i < N_TRAJECTORIES; ++i) {
 			vector<Vehicle> trajectory = generate_trajectory(*it, predictions);
 			if (trajectory.size() != 0) {
-
-				vector<double> start = { 0.0, trajectory.front().v, trajectory.front().a };
-				vector<double> end = { trajectory.back().s, trajectory.back().v, trajectory.back().a };
-				double T = HORIZON;
+				// Calculate the coefficients of a JMT for this maneuver
+				vector<double> start = { 0.0, trajectory.front().v, 
+					trajectory.front().a };
+				vector<double> end = 
+				{ trajectory.back().s - trajectory.front().s, 
+					trajectory.back().v, trajectory.back().a };
+				double T = N_CYCLES * DT;
 				vector<double> a_vals = JMT(start, end, T);
 
-
+				// Calculate the cost of each trajectory
 				cost = calculate_cost(*this, trajectory, predictions, a_vals);
 				costs.push_back(cost);
 				final_trajectories.push_back(trajectory);
-				cout << "state: " << *it << "   cost: " << cost << endl;
+				cout << "state: " << *it 
+					<< "   cost: " << cost 
+					<< "   speed: " << trajectory.back().v 
+					<< "   delta_s: " << trajectory.back().s 
+					- trajectory.front().s 
+					<< endl;
 			}
 		}
 	}
-
+	// Identify the lowest cost trajectory
 	vector<double>::iterator best_cost = min_element(begin(costs), end(costs));
 	int best_idx = distance(begin(costs), best_cost);
 	return final_trajectories[best_idx];
@@ -92,6 +99,7 @@ vector<string> Vehicle::successor_states() {
 	vector<string> states;
 	states.push_back("KL");
 	string state = this->state;
+
 	if (state.compare("KL") == 0) {
 		if (lane != RIGHT_LANE) {
 			states.push_back("LCR");
@@ -110,36 +118,14 @@ vector<string> Vehicle::successor_states() {
 			states.push_back("LCL");
 		}
 	}
-	/*
-	else if (state.compare("PLCR") == 0) {
-		if (lane != RIGHT_LANE) {
-			states.push_back("PLCR");
-			states.push_back("LCR");
-		}
-	}
-	else if (state.compare("PLCL") == 0) {
-		if (lane != LEFT_LANE) {
-			states.push_back("PLCL");
-			states.push_back("LCL");
-		}
-	}
-	else if (state.compare("LCR") == 0) {
-		if (lane != RIGHT_LANE) {
-			states.push_back("LCR");
-		}
-	}
-	else if (state.compare("LCL") == 0) {
-		if (lane != LEFT_LANE) {
-			states.push_back("LCL");
-		}
-	}
-	*/
 	return states;
 }
 
-vector<Vehicle> Vehicle::generate_trajectory(string state, map<int, vector<Vehicle>> predictions) {
+vector<Vehicle> Vehicle::generate_trajectory(string state, map<int, 
+	vector<Vehicle>> predictions) {
 	/*
-	Given a possible next state, generate the appropriate trajectory to realize the next state.
+	Given a possible next state, generate the appropriate trajectory to realize 
+	the next state.
 	*/
 
 	vector<Vehicle> trajectory;
@@ -149,19 +135,18 @@ vector<Vehicle> Vehicle::generate_trajectory(string state, map<int, vector<Vehic
 	else if (state.compare("LCL") == 0 || state.compare("LCR") == 0) {
 		trajectory = lane_change_trajectory(state, predictions);
 	}
-	else if (state.compare("PLCL") == 0 || state.compare("PLCR") == 0) {
-		trajectory = prep_lane_change_trajectory(state, predictions);
-	}
 	return trajectory;
 }
 
-vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predictions) {
+vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> 
+	predictions) {
 	/*
 	INPUT: A predictions map of the trajectories of other vehicles
 	OUTPUT: A waypoint 5 seconds in the future
 	*/
 
-	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
+	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, 
+		this->yaw, this->v, this->a, this->state) };
 	
 	// Perform a gaussian move to get a random future state
 	vector<double> kinematics = gaussian_move();
@@ -172,12 +157,15 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
 	
 	double d_new = this->lane_position[this->lane];
 
-	trajectory.push_back(Vehicle(this->lane, s_new, d_new, this->yaw, v_new, a_new, this->state));
+	trajectory.push_back(Vehicle(this->lane, s_new, d_new, this->yaw, v_new, 
+		a_new, this->state));
 	return trajectory;
 }
 
-vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions) {
-	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
+vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, 
+	vector<Vehicle>> predictions) {
+	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, 
+		this->yaw, this->v, this->a, this->state) };
 
 	// Perform a gaussian move to get a random future state
 	vector<double> kinematics = gaussian_move();
@@ -192,85 +180,36 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, vector<Ve
 	// The new d value corresponds to the new lane
 	double d_new = this->lane_position[new_lane];
 
-	trajectory.push_back(Vehicle(new_lane, s_new, d_new, this->yaw, v_new, a_new, state));
+	trajectory.push_back(Vehicle(new_lane, s_new, d_new, this->yaw, v_new, 
+		a_new, state));
 	return trajectory;
-}
-
-vector<Vehicle> Vehicle::prep_lane_change_trajectory(string state, map<int, vector<Vehicle>> predictions) {
-	vector<Vehicle> trajectory = { Vehicle(this->lane, this->s, this->d, this->yaw, this->v, this->a, this->state) };
-
-	vector<double> kinematics = gaussian_move();
-
-	double a_new = kinematics[0];
-	double v_new = kinematics[1];
-	double s_new = kinematics[2];
-
-	double d_new = this->lane_position[this->lane];
-
-	int new_lane = this->lane + lane_direction[this->state];
-
-	d_new = this->lane_position[new_lane];
-
-	trajectory.push_back(Vehicle(new_lane, s_new, d_new, this->yaw, v_new, a_new, this->state));
-	return trajectory;
-}
-
-Vehicle Vehicle::increment(double dt) {
-	/*
-	Moves a vehicle forward one timestep
-	*/
-	double a_new = this->a + this->j * dt;
-	double v_new = this->v + this->a * dt + 0.5 * this->j * pow(dt, 2);
-	double s_new = this->s + this->v * dt + 0.5 * this->a * pow(dt, 2) + 1.0 / 6 * this->j * pow(dt, 3);
-
-	// constrain the acceleration and velocity to the max allowable values
-	a_new = min(a_new, A_MAX);
-	v_new = min(v_new, V_MAX);
-
-
-	double d_new = (this->lane + 0.5) * LANE_WIDTH;
-
-	return Vehicle(this->lane, s_new, d_new, this->yaw, v_new, a_new, this->state);
 }
 
 vector<double> Vehicle::gaussian_move() {
 	/*
 	INPUT: none
-	OUTPUT: velocity, distance, and acceleration values based on a gaussian change in velocity
-			It is assumed that the acceleration is constant over this interval, and that the 
-			distance change is based on an average of the old/new velocities and speeds
+	OUTPUT: velocity, distance, and acceleration values based on a 
+	gaussian change in velocity
 	*/
-	
-	// New velocity is a distribution around the current velocity between 0 and V_MAX
-	normal_distribution<double> dist_v(this->v, SIGMA_V);
 
-	// Assume constant acceleration over the interval
-
+	// SIGMA_V is scaled by the length of the move
 	double t = DT * (N_CYCLES - this->prev_size);
+	normal_distribution<double> dist_v(this->v, SIGMA_V * t);
 
-	//Scale the velocity between 0 and V_MAX
+	// New velocity is a distribution around the current velocity 
+	// between 0 and V_MAX
+	// Assume constant acceleration over the interval
 	double v_new = min(V_MAX, max(dist_v(gen), 0.0));
 	double a_new = (v_new - this->v) / t;
+	double s_new = this->s + this->v * t + 0.5 * a_new * pow(t, 2);
 
-	double v_avg = 0.5 * (v_new + this->v);
-	double a_avg = 0.5 * (a_new + this->a);
-
-	double s_new = this->s + v_avg * t + 0.5 * a_avg * pow(t, 2);
-	
 	return { a_new, v_new, s_new };
-}
-
-bool Vehicle::get_vehicle_behind(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle) {
-	return false;
-}
-
-bool Vehicle::get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle) {
-	return false;
 }
 
 vector<Vehicle> Vehicle::generate_predictions(int horizon) {
 	/*
-	Generates a vector of predicted states for a vehicle with 1 second intervals.
+	Generates a vector of predicted states for a vehicle with 1 second 
+	intervals.
 	The length of the prediction is equal to the horizon (in seconds).
 	*/
 	vector<Vehicle> predictions;
@@ -280,8 +219,22 @@ vector<Vehicle> Vehicle::generate_predictions(int horizon) {
 	return predictions;
 }
 
-void Vehicle::realize_next_state(vector<Vehicle> trajectory) {
-}
+Vehicle Vehicle::increment(double dt) {
+	/*
+	Moves a vehicle forward one timestep
+	*/
+	double a_new = this->a + this->j * dt;
+	double v_new = this->v + this->a * dt + 0.5 * this->j * pow(dt, 2);
+	double s_new = this->s + this->v * dt + 0.5 * this->a * pow(dt, 2) 
+		+ 1.0 / 6 * this->j * pow(dt, 3);
 
-void Vehicle::configure(vector<int> road_data) {
+	// constrain the acceleration and velocity to the max allowable values
+	a_new = min(a_new, A_MAX);
+	v_new = min(v_new, V_MAX);
+
+
+	double d_new = (this->lane + 0.5) * LANE_WIDTH;
+
+	return Vehicle(this->lane, s_new, d_new, this->yaw, v_new, a_new, 
+		this->state);
 }
