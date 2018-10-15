@@ -132,7 +132,7 @@ For each possible trajectory, the sum of all the costs is calculated and then th
 
 The behavior generation follows a simple state space model to determine the available maneuvers at any given time. 
 
-[State Diagram](/state_diagram.png)
+![State Diagram](/state_diagram.png)
 
 When the simulator starts, the vehicle is in the Keep Lane state. From the Keep Lane state, the trajectory generator can select any of the 3 maneuvers. From the Lane Change Left/Right states, the trajectory generator can choose to continue to change the lane or keep the current lane. The vehicle state returns to Keep Lane once the "next lane" output by the trajectory generator is equal to the current lane.
 
@@ -158,7 +158,7 @@ By feeding these s-values into the spline mentioned previously with a DT = 20ms,
 
 Overall the model achieved very good results and was often able to complete several laps without incident while maintaining close to top speed, the best result being 31.73 miles.
 
-[State Diagram](/path_planning_31.73.PNG)
+![Best Record](/path_planning_31.73.PNG)
 
 The model does have some issues with higher density traffic situations. I weighted the cost functions in a slightly agressive manner that probably result in more frequent collisions, however it often maneuvers between tight traffic patterns and improve its average speed.
 
