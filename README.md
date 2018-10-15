@@ -73,29 +73,29 @@ The path planner I developed for this project followed a traditional architectur
 * Localization (from simulator) [~50 Hz]
 * Behavior Generation
     * Prediction [~50 Hz]
-    * Trajectory Generation [5 Hz]
+    * Trajectory Generation 1 [5 Hz]
     * Cost Evaluation [5 Hz]
-    * Trajectory Selection [5 Hz]
     * Vehicle State Update [5 Hz]
+    * Trajectory Generation 2 [5 Hz]
 * Motion Control (to simulator) [5 Hz]
 
-### Sensor Fusion / Localization
+### Sensor Fusion / Localization (main.cpp lines 266-340)
 
-This data was passed from the simulator via the uWebSockets protocol (main.cpp lines 266-288). No plausibilization or error checking was done on this data and it was assumed for the purpose of this model that the signals were noiseless.
+This data was passed from the simulator via the uWebSockets protocol. No plausibilization or error checking was done on this data and it was assumed for the purpose of this model that the signals were noiseless.
 
-By checking the historical path from the simulator, the ego vehicle acceleration can be determined (which is needed for the behavior generation). (main.cpp line 333)
+By checking the historical path from the simulator, the ego vehicle acceleration can be determined which is needed for the behavior generation (main.cpp lines 273-340).
 
-### Behavior Generation
+### Behavior Generation (main.cpp line 369)
 
 The behavior generation is where the bulk of the work was performed for this project. This was broken up into several sub-modules which are described below. Before these sub-modules are executed, the historical data from the simulator is used to assign the anchor points for the trajectory generator, as well as preloading the un-executed path from the motion controller. These tasks help to smooth the trajectory and minimize the jerk (main.cpp lines 343-366).
 
-#### Prediction
+#### Prediction (main.cpp lines 373-401)
 
 The first step is to predict the future state of the other road participants. Since no acceleration data or historical data is provided, it is assumed that the vehicles are travelling at a constant speed. Additionally it is assumed that the vehicles maintain their lane, however this could be changed to improve the prediction step.
 
 Using the kinematic information from the sensor fusion, the state of each vehicle is predicted 1 second into the future (main.cpp line 397)
 
-#### Trajectory Generation (main.cpp line 420)
+#### Trajectory Generation 1 (main.cpp lines 409-429)
 
 The trajectory generation operates at 5 Hz to reduce the computational complexity and prevent executing a new trajectory too quickly.
 
@@ -107,13 +107,16 @@ For each maneuver I generate 20 trajectories with a constant accceleration value
 #### Cost Evaluation (vehicle.cpp line 77)
 
 All 60 trajectories are fed into the following cost functions which can be found in cost.cpp:
-* Jerk - Higher cost for trajectories with greater maximum jerk
-* Acceleration - Higher cost for trajectories with greater maximum acceleration
-* Speed - Binary cost penalty for exceeding the speed limit
-* Free Lane - Cost for not driving in the most free lane
-* Lane Change - Cost for performing a lane change
-* Collision - Cost for trajectories which intersect another vehicle
-* Efficiency - Cost for driving below the speed limit
+
+|Weight|Cost|Description|
+|---|---|---|
+|Jerk|1|Higher cost for trajectories with greater maximum jerk|
+|Acceleration|5|Higher cost for trajectories with greater maximum acceleration|
+|Speed|1|Binary cost penalty for exceeding the speed limit|
+|Free Lane|2|Cost for not driving in the most free lane|
+|Lane Change|1|Cost for performing a lane change|
+|Collision|100|Cost for trajectories which intersect another vehicle|
+|Efficiency|10|Cost for driving below the speed limit|
 
 Some of these cost functions complement each other (jerk & acceleration), while others are in direct opposition (free lane & lane change). I found that balancing these cost functions was one of the more difficult and nuanced aspects of the project.
 
@@ -123,6 +126,43 @@ The free lane cost function I am particularly proud of because of how it is able
 
 The collision cost function looks at vehicles ahead and to the side. For vehicles ahead, it seeks to match speed at a comfortable distance and ends up acting as an ACC controller. The side collision checker simply applies a cost for maneuvers which get too close to vehicles in adjacent lanes.
 
+For each possible trajectory, the sum of all the costs is calculated and then the trajectory with the lowest combined cost is selected.
+
+#### Vehicle State Update
+
+The behavior generation follows a simple state space model to determine the available maneuvers at any given time. 
+
+[State Diagram](/state_diagram.png)
+
+When the simulator starts, the vehicle is in the Keep Lane state. From the Keep Lane state, the trajectory generator can select any of the 3 maneuvers. From the Lane Change Left/Right states, the trajectory generator can choose to continue to change the lane or keep the current lane. The vehicle state returns to Keep Lane once the "next lane" output by the trajectory generator is equal to the current lane.
+
+#### Trajectory Generation 2
+
+The output of the Cost Evaluation is the desired vehicle state at the end of the trajectory horizon (which is somewhere between 0-1 seconds ahead).
+
+The trajectory generation creates 2 waypoint behind the vehicle (called anchor points) and 3 waypoints ahead of the vehicle which are spaced according to the maneuver being executed.
+* If it is a Keep Lane maneuver, the waypoints are spaced 30, 60, and 90 meters in front of the vehicle in the same lane. This is done to ensure that the waypoints closely follow the s & d values as the vehicle rounds corners.
+* If it is a Lane Change maneuver, the waypoints are spaced 45, 75, and 105 meters in front of the vehicle in an adjacent lane. This is done to mitigate the lateral acceleration/jerk during a lane change.
+
+The 2 anchor points are extracted from the previous trajectory and added to the 3 new ones. Having 2 anchor points guarentees smoothness when these waypoints are converted to a spline in the motion control step.
+
+### Motion Control
+
+The output of the trajectory generation is the 5 waypoints previously described (2 of which are behind the vehicle). The spline library mentioned previously was used to create a spline from these waypoints (main.cpp line 497).
+
+In parallel, the initial and final state sent from the trajectory generation are fed into a Jerk Minimum Trajectory generator which outputs the coefficients to a quintic polynomial that describes the jerk-optimal s-values over time.
+
+By feeding these s-values into the spline mentioned previously with a DT = 20ms, a list of s & d values at 20 ms intervals is generated. This is then converted into global coordinates and is output to the simulator.
+
+## Results
+
+Overall the model achieved very good results and was often able to complete several laps without incident while maintaining close to top speed, the best result being 31.73 miles.
+
+[State Diagram](/path_planning_31.73.PNG)
+
+The model does have some issues with higher density traffic situations. I weighted the cost functions in a slightly agressive manner that probably result in more frequent collisions, however it often maneuvers between tight traffic patterns and improve its average speed.
+
+If I were to make some improvements, I would probably make the collision cost function more conservative. Additionally I would include a lateral jerk controller that ensures there is no overshoot during a lane change (which occasionally occurs).
 
 ## Dependencies
 
