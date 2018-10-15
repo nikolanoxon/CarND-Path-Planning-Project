@@ -158,13 +158,25 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 	const vector<double> &maps_x, const vector<double> &maps_y)
 {
 	int prev_wp = -1;
+	int wp2 = 0;
 
-	while(s > maps_s[prev_wp+1] && (prev_wp < (int)(maps_s.size()-1) ))
-	{
-		prev_wp++;
+	// circle back waypoints to the begining of the track
+	if (s >= maps_s.back()) {
+//		s -= S_MAX;
+		prev_wp = 180;
+		wp2 = 0;
+
+	}
+	else {
+		// TODO fix this assertion error caused by prev_wp = -1 because s_new < maps_s[0]
+		while (s > maps_s[prev_wp + 1] && (prev_wp < (int)(maps_s.size() - 1)))
+		{
+			prev_wp++;
+		}
+
+		wp2 = (prev_wp + 1) % maps_x.size();
 	}
 
-	int wp2 = (prev_wp+1)%maps_x.size();
 
 	double heading = atan2((maps_y[wp2]-maps_y[prev_wp]),(maps_x[wp2]-maps_x[prev_wp]));
 	// the x,y,s along the segment
@@ -194,8 +206,6 @@ int main() {
   
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
-  // The max s value before wrapping around the track back to 0
-  double max_s = 6945.554;
 
   ifstream in_map_(map_file_.c_str(), ifstream::in);
 
@@ -248,71 +258,34 @@ int main() {
         
         if (event == "telemetry") {
 			// j[1] is the data JSON object
-          
-			/*
-			SIMULATOR INPUT: Get all data from the simulator
-			*/
 
-        	// Main car's localization Data
-          	double car_x = j[1]["x"];
-          	double car_y = j[1]["y"];
+/*
+			SENSOR FUTION: list all other cars on the same side of the road
+*/
 
-			//TODO: fix the assertion error when the track loops back to the start (s_new < s_old)
-
-          	double car_s = j[1]["s"];
-          	double car_d = j[1]["d"];
-          	double car_yaw = j[1]["yaw"];
-          	double car_speed = j[1]["speed"] / 2.24;
-
-          	// Previous path data given to the Planner
-          	auto previous_path_x = j[1]["previous_path_x"];
-          	auto previous_path_y = j[1]["previous_path_y"];
-			int prev_size = previous_path_x.size();
-
-          	// Previous path's end s and d values 
-          	double end_path_s = j[1]["end_path_s"];
-          	double end_path_d = j[1]["end_path_d"];
-
-			// Sensor Fusion Data, a list of all other cars on the 
-			// same side of the road.
 			auto sensor_fusion = j[1]["sensor_fusion"];
 
 			/*
-			SENSOR FUSION: Determine the current and future state 
-			of other road users
+			LOCALIZATION: Determine vehicle state, kinematic data, and anchor
+			points for the motion controller
 			*/
 
-			// A map of predictions for non-ego vehicles
-			map<int, vector<Vehicle>> predictions;
+			// Main car's localization Data
+			double car_x = j[1]["x"];
+			double car_y = j[1]["y"];
+			double car_s = j[1]["s"];
+			double car_d = j[1]["d"];
+			double car_yaw = j[1]["yaw"];
+			double car_speed = j[1]["speed"] / 2.24;
 
-			for (int i = 0; i < sensor_fusion.size(); i++) {
+			// Previous path data given to the Planner
+			auto previous_path_x = j[1]["previous_path_x"];
+			auto previous_path_y = j[1]["previous_path_y"];
+			int prev_size = previous_path_x.size();
 
-				int id = sensor_fusion[i][0];
-				double x = sensor_fusion[i][1];
-				double y = sensor_fusion[i][2];
-				double vx = sensor_fusion[i][3];
-				double vy = sensor_fusion[i][4];
-				double s = sensor_fusion[i][5];
-				double d = sensor_fusion[i][6];
-
-				Vehicle road_vehicle;
-				road_vehicle.v = mag(vx, vy);
-				road_vehicle.s = s;
-				road_vehicle.d = d;
-				road_vehicle.lane = int(floor((d / LANE_WIDTH)));
-				road_vehicle.a = 0; // Assume no acceleration
-
-				//A vector of predictions for a non-ego vehicle
-				vector<Vehicle> prediction = 
-					road_vehicle.generate_predictions();
-
-				predictions.insert(pair<int, vector<Vehicle>>(id, prediction));
-			} 
-			
-			/*
-			VEHICLE STATE: Determine vehicle kinematics for 
-			initial state estimation
-			*/
+			// Previous path's end s and d values 
+			double end_path_s = j[1]["end_path_s"];
+			double end_path_d = j[1]["end_path_d"];
 
 			// Reference states
 			double ref_yaw = deg2rad(car_yaw);
@@ -323,9 +296,6 @@ int main() {
 			double ref_s, ref_d;
 			double ref_v2 = 0;
 			double ref_a1 = 0;
-
-			// Create a list of widely spaced (x,y) waypoints
-			vector<double> ptsx, ptsy;
 
 			// If there is no trajectory, use the car's position 
 			// and yaw rate to create anchor points
@@ -359,12 +329,6 @@ int main() {
 
 			double ref_lane = int(floor((ref_d / LANE_WIDTH)));
 
-			// Set the anchor points
-			ptsx.push_back(ref_x2);
-			ptsx.push_back(ref_x1);
-			ptsy.push_back(ref_y2);
-			ptsy.push_back(ref_y1);
-
 			// Find the acceleration at the end of the last trajectory
 			if (prev_size > 2) {
 				ref_x3 = previous_path_x[prev_size - 3];
@@ -376,12 +340,25 @@ int main() {
 			}
 
 			/*
-			MOTION CONTROL 1: Load the historical data
+			TRAJECTORY GENERATION PRELOAD: Load the historical data from the simulator
 			*/
+
+			// Create a list of widely spaced (x,y) waypoints
+			vector<double> ptsx, ptsy;
+
+			// Set the anchor points
+			ptsx.push_back(ref_x2);
+			ptsx.push_back(ref_x1);
+			ptsy.push_back(ref_y2);
+			ptsy.push_back(ref_y1);
 
 			// Define the actual (x,y) points we will use for the planner
 			vector<double> next_x_vals, next_y_vals, next_v_vals, next_a_vals;
 
+			/*
+			MOTION CONTROL PRELOAD: Load the historical data from the simulator
+			*/
+			
 			// Start with all the previous points from  the last time
 			for (int i = 0; i < prev_size; ++i) {
 				next_x_vals.push_back(previous_path_x[i]);
@@ -389,7 +366,42 @@ int main() {
 			}
 
 			/*
-			BEHAVIOR GENERATION:	Select the lowest cost trajectory from a 
+			BEHAVIOR GENERATION: Predict the environment and select the lowest cost action
+			*/
+
+			/*
+			PREDICTION: Determine the future state of other road users
+			*/
+
+			// A map of predictions for non-ego vehicles
+			map<int, vector<Vehicle>> predictions;
+
+			for (int i = 0; i < sensor_fusion.size(); i++) {
+
+				int id = sensor_fusion[i][0];
+				double x = sensor_fusion[i][1];
+				double y = sensor_fusion[i][2];
+				double vx = sensor_fusion[i][3];
+				double vy = sensor_fusion[i][4];
+				double s = sensor_fusion[i][5];
+				double d = sensor_fusion[i][6];
+
+				Vehicle road_vehicle;
+				road_vehicle.v = mag(vx, vy);
+				road_vehicle.s = s;
+				road_vehicle.d = d;
+				road_vehicle.lane = int(floor((d / LANE_WIDTH)));
+				road_vehicle.a = 0; // Assume no acceleration
+
+				//A vector of predictions for a non-ego vehicle
+				vector<Vehicle> prediction =
+					road_vehicle.generate_predictions();
+
+				predictions.insert(pair<int, vector<Vehicle>>(id, prediction));
+			}
+
+			/*
+			TRAJECTORY GENERATION: Select the lowest cost trajectory from a
 			list of randomly generated trajectories
 			*/
 
@@ -416,7 +428,9 @@ int main() {
 				double delta_s = next_s - car_s;
 				double delta_d = next_d - car_d;
 
-				// Update State
+				/*
+				VEHICLE STATE UPDATE
+				*/
 				if (next_lane > ref_lane) {
 					vehicle.state = "LCR";
 				}
@@ -427,30 +441,32 @@ int main() {
 					vehicle.state = "KL";
 				}
 
-				// This spline adjustment factor smooths out a lane change 
-				// maneuver
-				double s_adjust_lc = 0;
-				if (vehicle.state.compare("KL") == 1) {
-					s_adjust_lc = 20;
-				}
-
-/*
 				cout << "Current State: " << vehicle.state << endl;
 
-				cout << "CURRENT s: " << car_s << "   d: " << car_d << "   v: " << car_speed << "   lane: " << vehicle.lane << endl;
-				cout << "NEXT   s: " << next_s << "   d: " << next_d << "   v: " << next_v << "   a: " << next_a << "   lane: " << next_lane << endl;
-				cout << "REF1   s: " << ref_s << "   x1: " << ref_x1 << "   y1: " << ref_y1 << "   v1: " << ref_v1 << "   a1: " << ref_a1 << endl;
-				cout << "REF2   s: " << ref_s << "   x2: " << ref_x2 << "   y2: " << ref_y2 << "   v2: " << ref_v2 << endl;
+				cout << "CURRENT s: " << car_s << "   d: " << car_d << 
+					"   v: " << car_speed << "   lane: " << vehicle.lane << endl;
+				cout << "NEXT   s: " << next_s << "   d: " << next_d << 
+					"   v: " << next_v << "   a: " << next_a << "   lane: " << next_lane << endl;
+				cout << "REF1   s: " << ref_s << "   x1: " << ref_x1 << 
+					"   y1: " << ref_y1 << "   v1: " << ref_v1 << "   a1: " << ref_a1 << endl;
+				cout << "REF2   s: " << ref_s << "   x2: " << ref_x2 << 
+					"   y2: " << ref_y2 << "   v2: " << ref_v2 << endl;
 				cout << "GOAL   ds: " << delta_s << "   dd: " << delta_d << endl;
 				cout << "previous size: " << prev_size << endl;
 
-*/
+				// This spline adjustment factor smooths out a lane change 
+				// maneuver
+				double s_delta = 0;
+				if (vehicle.state.compare("KL") == 1) {
+					s_delta = S_ADJUST_LC;
+				}
 
-				vector<double> next_wp0 = getXY(car_s + 30 + s_adjust_lc, 
+				// Get the (x,y) coordinates for the next 3 waypoints
+				vector<double> next_wp0 = getXY(car_s + 30 + s_delta,
 					next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-				vector<double> next_wp1 = getXY(car_s + 60 + s_adjust_lc, 
+				vector<double> next_wp1 = getXY(car_s + 60 + s_delta,
 					next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-				vector<double> next_wp2 = getXY(car_s + 90 + s_adjust_lc,
+				vector<double> next_wp2 = getXY(car_s + 90 + s_delta,
 					next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
 				ptsx.push_back(next_wp0[0]);
@@ -461,6 +477,12 @@ int main() {
 				ptsy.push_back(next_wp1[1]);
 				ptsy.push_back(next_wp2[1]);
 
+				/*
+				MOTION CONTROL: Convert the waypoints created by the trajectory generation
+				to a jerk minimum trajectory
+				*/
+
+				// Shift the global coordinates to the vehicle coordinates
 				for (int i = 0; i < ptsx.size(); ++i) {
 					// Shift car reference point to 0
 					double shift_x = ptsx[i] - ref_x1;
@@ -491,9 +513,6 @@ int main() {
 						+ a_vals[2] * pow(t, 2) + a_vals[3] * pow(t, 3) 
 						+ a_vals[4] * pow(t, 4) + a_vals[5] * pow(t, 5);
 					double y_point = s(x_point);
-					//double v_point = a_vals[1] + 2 * a_vals[2] * t + 3 * a_vals[3] * pow(t, 2) + 4 * a_vals[4] * pow(t, 3) + 5 * a_vals[5] * pow(t, 4);
-					//double a_point = 2 * a_vals[2] + 6 * a_vals[3] * t + 12 * a_vals[4] * pow(t, 2) + 20 * a_vals[5] * pow(t, 3);
-
 					double x_ref = x_point;
 					double y_ref = y_point;
 
@@ -506,10 +525,7 @@ int main() {
 
 					next_x_vals.push_back(x_point);
 					next_y_vals.push_back(y_point);
-					//next_v_vals.push_back(v_point);
-					//next_a_vals.push_back(a_point);
 				}
-
 			}
 			json msgJson;
 			msgJson["next_x"] = next_x_vals;

@@ -13,7 +13,6 @@ double lane_change_cost(const Vehicle & vehicle,
 	Cost becomes higher for changing langes
 	*/
 	// Scale cost between 0 and 1
-	// TODO: Add a feature that looks "far" ahead to prioritize an empty lane
 	double cost = min(fabs(vehicle.lane - trajectory.back().lane),1.0);
 	return cost;
 }
@@ -40,7 +39,6 @@ double jerk_cost(const Vehicle & vehicle, const vector<Vehicle>& trajectory,
 	*/
 	double max_jerk = 0;
 	// Iterate across the who cycle and find the peak jerk
-	// TODO: Move this calculation to a helper function
 	for (int i = 0; i < N_CYCLES - vehicle.prev_size; ++i) {
 		double t = i * DT;
 		max_jerk = max(max_jerk, 6 * a_vals[3] + 24 * a_vals[4] * t 
@@ -61,7 +59,6 @@ double accel_cost(const Vehicle & vehicle, const vector<Vehicle>& trajectory,
 	*/
 	double max_accel = 0;
 	// Iterate across the who cycle and find the peak acceleration
-	// TODO: Move this calculation to a helper function
 	for (int i = 0; i < N_CYCLES - vehicle.prev_size; ++i) {
 		double t = i * DT;
 		max_accel = max(max_accel, 2 * a_vals[2] + 6 * a_vals[3] * t 
@@ -83,7 +80,6 @@ double speed_cost(const Vehicle & vehicle, const vector<Vehicle>& trajectory,
 	
 	double max_speed = 0;
 	// Iterate across the who cycle and find the peak acceleration
-	// TODO: Move this calculation to a helper function
 	for (int i = 0; i < N_CYCLES - vehicle.prev_size; ++i) {
 		double t = i * DT;
 		max_speed = max(max_speed, a_vals[1] + 2 * a_vals[2] * t 
@@ -92,7 +88,6 @@ double speed_cost(const Vehicle & vehicle, const vector<Vehicle>& trajectory,
 	}
 
 	// Apply a cost if the velocity overspeeds
-	
 	double cost = 0;
 
 	if (max_speed >= V_MAX || max_speed == 0.0) {
@@ -129,8 +124,6 @@ double free_lane_cost(const Vehicle & vehicle,
 
 	// Identify the lane with the furthest vehicle
 	vector<double>::iterator best_s = max_element(begin(min_s), end(min_s));
-	// TODO: I think this will make the vehicle default to the left lane if no
-	// vehicles are detected
 	int best_lane = distance(begin(min_s), best_s);
 
 	// Apply a cost for driving further from the best lane
@@ -145,43 +138,56 @@ double collision_cost(const Vehicle & vehicle,
 	const map<int, vector<Vehicle>>& predictions, const vector<double>& a_vals)
 {
 	/*
-	Cost becomes higher for following too closely behind a forward vehicle and
-	having a higher speed than a forward vehicle
+	Cost becomes higher for following too closely behind a forward vehicle, having
+	a higher speed than a forward vehicle, and driving next to a vehicle
 	*/
 	double speed_cost = 0;
 	double dist_cost = 0;
+	double dist_f_cost = 0;
+	double dist_sf_cost = 0;
+	double dist_sr_cost = 0;
 
+	// Ego and other vehicle positions
 	double front_s_min = vehicle.s + FWD_HORIZON;
-	double side_s_max = vehicle.s + SIDE_BUFFER;
-	double side_s_min = vehicle.s - SIDE_BUFFER;
+	double side_s_max = vehicle.s + SIDE_F_BUFFER;
+	double side_s_min = vehicle.s - SIDE_R_BUFFER;
 	double next_s = trajectory.back().s;
 	double next_v = trajectory.back().v;
 	double next_lane = trajectory.back().lane;
+
 	for (map<int, vector<Vehicle>>::const_iterator it = predictions.begin(); 
 		it != predictions.end(); ++it) {
 		// Check if there will be a vehicle in the lane of this trajectory 
 		// within the minimum distance
-		double fwd_veh_lane = it->second.back().lane;
-		double fwd_veh_s = it->second.back().s;
-		double fwd_veh_v = it->second.back().v;
-		if ((fwd_veh_lane == next_lane) && (fwd_veh_s < front_s_min) 
-			&& (fwd_veh_s > next_s)) {
+		double veh_next_lane = it->second.back().lane;
+		double veh_next_s = it->second.back().s;
+		double veh_next_v = it->second.back().v;
+		double veh_ref_lane = it->second.front().lane;
+		double veh_ref_s = it->second.front().s;
+
+		if ((veh_next_lane == next_lane) && (veh_next_s < front_s_min)
+			&& (veh_next_s > next_s)) {
 			
-			// Cost is proportional to the difference in speed to the fwd 
+			// Cost is proportional to the difference in speed to the near 
 			// vehicle
-			speed_cost = min(max(next_v - fwd_veh_v, 0.0) / fwd_veh_v, 1.0);
-			dist_cost = 1 - min(max((fwd_veh_s - FWD_BUFFER) - next_s, 0.0) 
+			speed_cost = min(max(next_v - veh_next_v, 0.0) / veh_next_v, 1.0);
+			dist_f_cost = 1 - min(max((veh_next_s - FWD_BUFFER) - next_s, 0.0)
 				/ FWD_HORIZON, 1.0);
 
 		}
 		if (trajectory.back().state.compare("KL") == 1) {
 			// If we plan to lane change, check if there is currently a vehicle
 			// in that lane
-			if ((fwd_veh_lane == next_lane) && (fwd_veh_s < side_s_max) 
-				&& (fwd_veh_s > side_s_min)) {
-				dist_cost = 1;
+			if (veh_ref_lane == next_lane) {
+				if ((veh_ref_s > vehicle.s) && (veh_ref_s <= side_s_max)) {
+					dist_sf_cost = 1 - fabs(vehicle.s - veh_ref_s) / SIDE_F_BUFFER;
+				}
+				else if ((veh_ref_s <= vehicle.s) && (veh_ref_s >= side_s_min)) {
+					dist_sr_cost = 1 - fabs(vehicle.s - veh_ref_s) / SIDE_R_BUFFER;
+				}
 			}
 		}
+		dist_cost = max(dist_f_cost, max(dist_sf_cost, dist_sr_cost));
 	}
 	// Return the average of the two costs as a combined collision cost
 	return 0.5 * (dist_cost + speed_cost);
@@ -196,7 +202,7 @@ double calculate_cost(const Vehicle & vehicle,
 	*/
 	double cost = 0.0;
 
-	//Add additional cost functions here.
+	//Cost functions
 	vector< function<double(const Vehicle &, const vector<Vehicle> &, 
 		const map<int, vector<Vehicle>> &, const vector<double> &)>> 
 		cf_list = { free_lane_cost, speed_cost, collision_cost, lane_change_cost,
@@ -204,6 +210,7 @@ double calculate_cost(const Vehicle & vehicle,
 	vector<double> weight_list = { COST_FREE_LANE, COST_SPEED, COST_COLLISION, 
 		COST_LANE_CHANGE, COST_EFFICIENCY, COST_JERK, COST_ACCEL };
 
+	// Sum the cost of all the cost functions
 	for (int i = 0; i < cf_list.size(); i++) {
 		double new_cost = 
 			weight_list[i] * cf_list[i](vehicle, trajectory, predictions, 

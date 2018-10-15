@@ -66,6 +66,64 @@ A really helpful resource for doing this project and creating smooth trajectorie
 
 ---
 
+## Model Documentation
+
+The path planner I developed for this project followed a traditional architecture for a SDC, albeit with some aspects provided by the simulator. The throughput for my architecture is as follows:
+* Sensor fusion (from simulator) [~50 Hz]
+* Localization (from simulator) [~50 Hz]
+* Behavior Generation
+    * Prediction [~50 Hz]
+    * Trajectory Generation [5 Hz]
+    * Cost Evaluation [5 Hz]
+    * Trajectory Selection [5 Hz]
+    * Vehicle State Update [5 Hz]
+* Motion Control (to simulator) [5 Hz]
+
+### Sensor Fusion / Localization
+
+This data was passed from the simulator via the uWebSockets protocol (main.cpp lines 266-288). No plausibilization or error checking was done on this data and it was assumed for the purpose of this model that the signals were noiseless.
+
+By checking the historical path from the simulator, the ego vehicle acceleration can be determined (which is needed for the behavior generation). (main.cpp line 333)
+
+### Behavior Generation
+
+The behavior generation is where the bulk of the work was performed for this project. This was broken up into several sub-modules which are described below. Before these sub-modules are executed, the historical data from the simulator is used to assign the anchor points for the trajectory generator, as well as preloading the un-executed path from the motion controller. These tasks help to smooth the trajectory and minimize the jerk (main.cpp lines 343-366).
+
+#### Prediction
+
+The first step is to predict the future state of the other road participants. Since no acceleration data or historical data is provided, it is assumed that the vehicles are travelling at a constant speed. Additionally it is assumed that the vehicles maintain their lane, however this could be changed to improve the prediction step.
+
+Using the kinematic information from the sensor fusion, the state of each vehicle is predicted 1 second into the future (main.cpp line 397)
+
+#### Trajectory Generation (main.cpp line 420)
+
+The trajectory generation operates at 5 Hz to reduce the computational complexity and prevent executing a new trajectory too quickly.
+
+With all the relevent information known, trajectories are created for up to three possible maneuvers: Keep Lane, Lane Change Left, and Lane Change Right. The maneuvers available depend on the current vehicle state (see Vehicle State Selection for more details).
+
+For each maneuver I generate 20 trajectories with a constant accceleration value selected from a gaussian distribution with a mean of 0 and a standard deviation of 3 m/s^2 (vehicle.cpp line 190). This helps to ensure that all the trajectories have reasonable acceleration values while exploring a dense, random path.
+
+
+#### Cost Evaluation (vehicle.cpp line 77)
+
+All 60 trajectories are fed into the following cost functions which can be found in cost.cpp:
+* Jerk - Higher cost for trajectories with greater maximum jerk
+* Acceleration - Higher cost for trajectories with greater maximum acceleration
+* Speed - Binary cost penalty for exceeding the speed limit
+* Free Lane - Cost for not driving in the most free lane
+* Lane Change - Cost for performing a lane change
+* Collision - Cost for trajectories which intersect another vehicle
+* Efficiency - Cost for driving below the speed limit
+
+Some of these cost functions complement each other (jerk & acceleration), while others are in direct opposition (free lane & lane change). I found that balancing these cost functions was one of the more difficult and nuanced aspects of the project.
+
+The lane change cost function was included to prevent the vehicle from changing lanes unless it was neccessary (like in case of a collision, or a free lane was found).
+
+The free lane cost function I am particularly proud of because of how it is able to handle more complex situations. For example, if the vehicle is 2 lanes away from the best lane, the cost function will encourage a lane change even though the next lane over is not otherwise and preferable. Additionally, if the vehicle is in the center lane and needs to make a lane change, it will prioritize changing into the most free lane.
+
+The collision cost function looks at vehicles ahead and to the side. For vehicles ahead, it seeks to match speed at a comfortable distance and ends up acting as an ACC controller. The side collision checker simply applies a cost for maneuvers which get too close to vehicles in adjacent lanes.
+
+
 ## Dependencies
 
 * cmake >= 3.5

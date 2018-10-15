@@ -77,12 +77,14 @@ vector<Vehicle> Vehicle::choose_next_state(map<int,
 				cost = calculate_cost(*this, trajectory, predictions, a_vals);
 				costs.push_back(cost);
 				final_trajectories.push_back(trajectory);
-				cout << "state: " << *it 
-					<< "   cost: " << cost 
-					<< "   speed: " << trajectory.back().v 
-					<< "   delta_s: " << trajectory.back().s 
-					- trajectory.front().s 
+
+				cout << "state: " << *it
+					<< "   cost: " << cost
+					<< "   speed: " << trajectory.back().v
+					<< "   delta_s: " << trajectory.back().s
+					- trajectory.front().s
 					<< endl;
+
 			}
 		}
 	}
@@ -232,7 +234,7 @@ Vehicle Vehicle::increment(double dt) {
 	a_new = min(a_new, A_MAX);
 	v_new = min(v_new, V_MAX);
 
-
+	// Assume the vehicle will not change lanes
 	double d_new = (this->lane + 0.5) * LANE_WIDTH;
 
 	return Vehicle(this->lane, s_new, d_new, this->yaw, v_new, a_new, 
